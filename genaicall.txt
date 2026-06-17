@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""
+Simple script to call a single Genesis AI assistant.
+"""
+
+import os
+import time
+import requests
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+BASE_URL = "https://api.ai.us.lmco.com/v1"
+API_KEY = os.getenv("LLM_API_KEY")
+ASSISTANT_ID = os.getenv("PM_ASSISTANT_ID")  # Change to any assistant ID you want
+
+
+# ============================================================================
+# MAIN FUNCTION
+# ============================================================================
+def ask_assistant(prompt: str) -> str:
+    """
+    Send a prompt to the Genesis assistant and get a response.
+    
+    Args:
+        prompt: Your question/prompt
+    
+    Returns:
+        The assistant's response text
+    """
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # Step 1: Create a thread (conversation)
+    print("Creating conversation...")
+    thread_response = requests.post(
+        f"{BASE_URL}/threads",
+        headers=headers,
+        json={},
+        timeout=10
+    )
+    thread_id = thread_response.json()["id"]
+    print(f"Thread ID: {thread_id}")
+    
+    # Step 2: Add your message
+    print(f"\nYour prompt: {prompt}")
+    requests.post(
+        f"{BASE_URL}/threads/{thread_id}/messages",
+        headers=headers,
+        json={"role": "user", "content": prompt},
+        timeout=10
+    )
+    
+    # Step 3: Run the assistant
+    print("Running assistant...")
+    run_response = requests.post(
+        f"{BASE_URL}/threads/{thread_id}/runs",
+        headers=headers,
+        json={"assistant_id": ASSISTANT_ID},
+        timeout=30
+    )
+    run_id = run_response.json()["id"]
+    
+    # Step 4: Wait for completion
+    print("Waiting for response...")
+    for _ in range(60):  # Wait up to 60 seconds
+        status_response = requests.get(
+            f"{BASE_URL}/threads/{thread_id}/runs/{run_id}",
+            headers=headers,
+            timeout=10
+        )
+        status = status_response.json()["status"]
+        
+        if status == "completed":
+            break
+        elif status in ["failed", "cancelled", "expired"]:
+            raise Exception(f"Run {status}")
+        
+        time.sleep(1)
+    
+    # Step 5: Get the response
+    messages_response = requests.get(
+        f"{BASE_URL}/threads/{thread_id}/messages",
+        headers=headers,
+        timeout=10
+    )
+    messages = messages_response.json()["data"]
+    
+    # Find assistant's response
+    for message in messages:
+        if message["role"] == "assistant":
+            response_text = message["content"][0]["text"]["value"]
+            print(f"\nAssistant: {response_text}\n")
+            return response_text
+    
+    raise Exception("No response found")
+
+
+# ============================================================================
+# USAGE
+# ============================================================================
+if __name__ == "__main__":
+    # Example: Ask a question
+    response = ask_assistant("What is the current program status?")
+    
+    # You can call it multiple times in the same script
+    # response2 = ask_assistant("What are the top risks?")
