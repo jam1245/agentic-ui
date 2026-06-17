@@ -1,0 +1,20 @@
+# LLM-generated on-the-fly UI (generate_custom_element_code)
+public/elements/_tmp_*.jsx
+
+# 
+.env
+__pycache__
+.vscode/
+.DS_Store
+notes.txt
+__pycache__/*
+.files
+.files/*
+_ref
+_ref/*
+chainlit
+chainlit/*
+_archive
+_archive/*
+venv
+venv/*
