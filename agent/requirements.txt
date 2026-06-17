@@ -1,0 +1,8 @@
+google-adk>=0.3.0
+pydantic>=2.7
+
+# Tier 4 — expose the ADK agent over the AG-UI protocol for the self-hosted CopilotKit
+# runtime (server/copilotkit-runtime.ts). No Copilot Cloud required.
+ag-ui-adk>=0.1.0
+fastapi>=0.110
+uvicorn>=0.29

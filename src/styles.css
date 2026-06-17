@@ -1,0 +1,74 @@
+/* Minimal styling for the reference renderers. Replace with your design system
+   (Tailwind, shadcn, etc.) — the contract and renderers don't depend on these. */
+:root {
+  --agui-border: #e2e8f0;
+  --agui-muted: #64748b;
+  --agui-bg: #ffffff;
+  --agui-radius: 10px;
+}
+
+.agent-ui {
+  border: 1px solid var(--agui-border);
+  border-radius: var(--agui-radius);
+  background: var(--agui-bg);
+  padding: 16px;
+  margin: 12px 0;
+  font-family: system-ui, sans-serif;
+}
+.agent-ui-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.agent-ui-title { font-size: 15px; font-weight: 600; margin: 0; }
+.agent-ui-footer {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  margin-top: 12px; font-size: 12px; color: var(--agui-muted);
+}
+.agent-ui-badge--fallback { background: #fef9c3; color: #854d0e; border-radius: 6px; padding: 1px 6px; font-size: 11px; }
+.agent-ui-error { color: #dc2626; }
+
+/* tables */
+.agent-ui-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.agent-ui-table th, .agent-ui-table td { border-bottom: 1px solid var(--agui-border); padding: 6px 10px; }
+.agent-ui-table th { color: var(--agui-muted); font-weight: 600; }
+
+/* KPI grid */
+.agent-ui-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.agent-ui-kpi-card { border: 1px solid var(--agui-border); border-radius: 8px; padding: 12px; }
+.agent-ui-kpi-label { font-size: 12px; color: var(--agui-muted); }
+.agent-ui-kpi-value { font-size: 24px; font-weight: 700; }
+.agent-ui-kpi-unit { font-size: 13px; font-weight: 500; }
+.agent-ui-kpi-delta { font-size: 12px; color: var(--agui-muted); }
+
+/* risk matrix */
+.agent-ui-risk-matrix { border-collapse: collapse; }
+.agent-ui-risk-matrix td { width: 90px; height: 70px; border: 1px solid var(--agui-border); vertical-align: top; padding: 4px; }
+.agent-ui-risk-axis { color: var(--agui-muted); font-size: 12px; text-align: center; }
+.agent-ui-risk-chip { background: #ffffffcc; border-radius: 4px; font-size: 11px; padding: 1px 4px; margin: 2px 0; }
+
+/* timeline */
+.agent-ui-timeline { list-style: none; padding: 0; margin: 0; border-left: 2px solid var(--agui-border); }
+.agent-ui-timeline-item { display: flex; gap: 12px; padding: 8px 0 8px 16px; position: relative; }
+.agent-ui-timeline-item::before { content: ""; position: absolute; left: -7px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: #2563eb; }
+.agent-ui-timeline-date { font-size: 12px; color: var(--agui-muted); min-width: 90px; }
+.agent-ui-timeline-title { font-weight: 600; font-size: 14px; }
+.agent-ui-timeline-desc { font-size: 12px; color: var(--agui-muted); }
+
+/* gantt */
+.agent-ui-gantt-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.agent-ui-gantt-label { width: 160px; font-size: 12px; }
+.agent-ui-gantt-track { position: relative; flex: 1; height: 18px; background: #f1f5f9; border-radius: 4px; }
+.agent-ui-gantt-bar { position: absolute; height: 100%; background: #2563eb; border-radius: 4px; overflow: hidden; }
+.agent-ui-gantt-bar[data-status="warning"] { background: #d97706; }
+.agent-ui-gantt-fill { position: absolute; left: 0; top: 0; height: 100%; background: #ffffff55; }
+
+/* variance arrows handled inline */
+
+/* fishbone */
+.agent-ui-fishbone-head { text-align: center; font-weight: 600; background: #1e293b; color: #fff; border-radius: 8px; padding: 8px; margin-bottom: 12px; }
+.agent-ui-fishbone-bones { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.agent-ui-fishbone-bone { border: 1px solid var(--agui-border); border-radius: 8px; padding: 8px; }
+.agent-ui-fishbone-category { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.agent-ui-fishbone-bone ul { margin: 0; padding-left: 16px; font-size: 12px; }
+
+/* interactive drill buttons */
+.agent-ui-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.agent-ui-drill-btn { border: 1px solid var(--agui-border); background: #f8fafc; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.agent-ui-drill-btn:hover { background: #eef2ff; }

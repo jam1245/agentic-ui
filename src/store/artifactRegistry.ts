@@ -1,0 +1,76 @@
+/**
+ * Session-level artifact registry (front-end half).
+ *
+ * Holds the ArtifactContext for every artifact rendered this session, so the chat agent
+ * can stay data-aware. Dependency-free: a tiny observable store consumable via
+ * `useSyncExternalStore` (swap for Zustand/Redux if you already use one — the shape and
+ * the digest projection are what matter, not the library).
+ *
+ * IMPORTANT: this is the *client* mirror. For durable, multi-tab, or server-reasoned
+ * follow-ups, the same ArtifactContext should also live in the backend session store
+ * (ADK session state / your DB). See docs/09-artifact-aware-context.md — the recommended
+ * production setup is BOTH: backend is the source of truth, client mirror drives the UI
+ * and feeds CopilotKit readables.
+ */
+import { useSyncExternalStore } from "react";
+import type { ArtifactContext, ArtifactDigest } from "../contract";
+import { toDigest } from "../contract";
+
+type Listener = () => void;
+
+class ArtifactRegistry {
+  private artifacts = new Map<string, ArtifactContext>();
+  private listeners = new Set<Listener>();
+  private snapshot: ArtifactContext[] = [];
+
+  upsert(artifact: ArtifactContext) {
+    this.artifacts.set(artifact.artifactId, artifact);
+    this.emit();
+  }
+
+  get(artifactId: string): ArtifactContext | undefined {
+    return this.artifacts.get(artifactId);
+  }
+
+  /** Full rows for one artifact — the "rehydrate on demand" path (client cache hit). */
+  getFullData(artifactId: string): Record<string, unknown>[] | undefined {
+    return this.artifacts.get(artifactId)?.fullData;
+  }
+
+  /** Compact, prompt-safe digests of all artifacts — feed THESE to the chat agent. */
+  digests(): ArtifactDigest[] {
+    return this.snapshot.map(toDigest);
+  }
+
+  list = (): ArtifactContext[] => this.snapshot;
+
+  clear() {
+    this.artifacts.clear();
+    this.emit();
+  }
+
+  subscribe = (l: Listener): (() => void) => {
+    this.listeners.add(l);
+    return () => this.listeners.delete(l);
+  };
+
+  getSnapshot = (): ArtifactContext[] => this.snapshot;
+
+  private emit() {
+    this.snapshot = [...this.artifacts.values()];
+    this.listeners.forEach((l) => l());
+  }
+}
+
+/** One registry per browser session. */
+export const artifactRegistry = new ArtifactRegistry();
+
+/** React hook: re-renders when artifacts change. */
+export function useArtifacts(): ArtifactContext[] {
+  return useSyncExternalStore(artifactRegistry.subscribe, artifactRegistry.getSnapshot, artifactRegistry.getSnapshot);
+}
+
+export function useArtifactDigests(): ArtifactDigest[] {
+  const artifacts = useArtifacts();
+  return artifacts.map(toDigest);
+}
