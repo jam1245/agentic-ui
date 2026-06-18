@@ -55,7 +55,7 @@ useCopilotAction({
 ```
 
 To use that path you need a CopilotKit runtime pointed at an AG-UI-compatible agent. Genesis
-is an Assistants-style HTTP API, so you'd put a thin AG-UI adapter in front of the Genesis
+is a Completions HTTP API, so you'd put a thin AG-UI adapter in front of the Genesis
 agent loop (`agent/genesis_agent.py`) and register it with the self-hosted, open-source
 `@copilotkit/runtime` (no Copilot Cloud needed). It is not wired in this repo — the HTTP
 transport above is simpler and fully working — but the **contract, renderers, registry, and

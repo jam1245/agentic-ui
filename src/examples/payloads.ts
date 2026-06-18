@@ -12,7 +12,7 @@ export const cpiTrend: AgentUIPayload = {
   data: [
     { month: "Jan", cpi: 0.92 },
     { month: "Feb", cpi: 0.95 },
-    { month: "Mar", cpi: 0.98 },
+    { month: "Mar", cpi: 0.90 },
     { month: "Apr", cpi: 0.97 },
     { month: "May", cpi: 0.99 },
     { month: "Jun", cpi: 1.01 },

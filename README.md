@@ -81,7 +81,7 @@ npm run dev:genesis          # → http://localhost:5173/
 #    click "Show CPI trend…", then "Why did March dip?" and watch the Context panel.
 
 # 3. Go live with the real Genesis LLM:
-#    copy .env.example → .env and set LLM_API_KEY + PM_ASSISTANT_ID (loaded automatically)
+#    copy .env.example → .env and set LLM_API_KEY + LLM_MODEL (loaded automatically)
 #    macOS/Linux: cp .env.example .env   |   Windows: copy .env.example .env
 npm run dev:genesis
 ```
@@ -120,8 +120,8 @@ src/                       ← React reference implementation
 
 server/genesis_app.py      ← FastAPI backend: drives the UI with the internal Genesis LLM
 agent/                     ← Python (Genesis-only; no Google ADK, no Google key)
-  genesis_client.py        internal Genesis Assistants-API client (+ offline mock)
-  genesis_agent.py         agent loop over Genesis → validated payloads + artifacts
+  genesis_client.py        internal Genesis Completions-API client (+ offline mock)
+  genesis_agent.py         hybrid loop: deterministic router + LLM prose → payloads + artifacts
   data_tools.py            MCP/data-layer tools (return rows + source/filters)
   payloads.py              pydantic mirror of CONTRACT 1
   artifacts.py             pydantic mirror of CONTRACT 2 + session-state registry

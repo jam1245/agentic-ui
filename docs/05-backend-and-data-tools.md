@@ -6,8 +6,8 @@ LLM is the internal **Genesis** assistant — no Google ADK, no Google key.
 
 ```
 DATA tools  = data access / computation     → return rows      (agent/data_tools.py)
-AGENT loop  = reasoning bridge over Genesis → payload + artifact (agent/genesis_agent.py)
-LLM         = internal Genesis Assistants API                   (agent/genesis_client.py)
+AGENT loop  = hybrid router + LLM prose      → payload + artifact (agent/genesis_agent.py)
+LLM         = internal Genesis Completions API                  (agent/genesis_client.py)
 ```
 
 ## Data tools — your MCP / enterprise layer
@@ -28,29 +28,24 @@ def get_cpi_trend(program: str, months: int = 6) -> dict:
 In production these wrap real MCP servers. The `source`/`filters` they return flow straight
 into the payload's `metadata` and the artifact's provenance — for free.
 
-## The agent loop over Genesis
+## The hybrid agent loop
 
-Genesis returns *text*, not native tool calls, so [`agent/genesis_agent.py`](../agent/genesis_agent.py)
-gives it a small JSON **action protocol** and runs the reasoning loop. The model picks the
-data tool and the presentation; **our code attaches the real rows**, so the model never
-fabricates numbers.
+`gpt-oss-120b` is a reasoning model that resists strict-JSON output, so
+[`agent/genesis_agent.py`](../agent/genesis_agent.py) splits the work:
 
-```jsonc
-// the assistant replies with one action per turn
-{"action":"fetch_data","tool":"get_cpi_trend","args":{"program":"P-117","months":6},
- "then":{"component":"line_chart","title":"CPI Trend — Last 6 Months",
-         "fields":{"x":"month","y":"cpi"},"summary":"CPI rose, dipped in March.",
-         "explanation":"Line chart for a trend over time."}}
-```
+- **`route_chart(question)`** deterministically maps the question to a data tool +
+  component + field mapping (structure can't be broken by the model),
+- the **data tool** supplies the real rows (the model never fabricates numbers),
+- the **LLM** writes the takeaway sentence and answers follow-ups (`client.ask(..., raw=True)`),
+  with a deterministic fallback if it returns junk or we're offline.
 
-We run the tool, assemble + validate an `AgentUIPayload` (pydantic), store an
-`ArtifactContext`, and return both. Follow-ups use `{"action":"get_artifact",...}` to
-rehydrate prior rows, and `{"action":"reply",...}` to answer from context. Full protocol +
-the system instruction that teaches visualization choice: [10](10-genesis-internal-llm.md).
+We assemble + validate an `AgentUIPayload` (pydantic), store an `ArtifactContext`, and
+return both. Follow-ups rehydrate prior rows from the artifact registry. Full walkthrough:
+[10](10-genesis-internal-llm.md).
 
-## Teaching visualization choice
+## The visualization mapping (deterministic router)
 
-Map components to **intent**, not just data shape (this lives in `SYSTEM_INSTRUCTION` in
+Components map to **intent**, not just data shape (this lives in `route_chart` in
 `genesis_agent.py`):
 
 ```

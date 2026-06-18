@@ -88,6 +88,8 @@ def chat(req: ChatRequest) -> dict:
         "text": result.text,
         "payloads": result.payloads,
         "artifacts": result.artifacts,
+        # Drives the UI's "🧠 used context" badge — proves a follow-up reused stored data.
+        "context_used": result.context_used,
     }
 
 

@@ -22,7 +22,9 @@ def get_cpi_trend(program: str, months: int = 6) -> dict:
         program: Program identifier, e.g. "P-117".
         months: How many trailing months to return.
     """
-    series = [0.92, 0.95, 0.98, 0.97, 0.99, 1.01][-months:]
+    # March is a deliberate dip (0.90) so the canonical "why did March dip?" follow-up is
+    # truthful against the data the chart was built from.
+    series = [0.92, 0.95, 0.90, 0.97, 0.99, 1.01][-months:]
     labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"][-months:]
     return {
         "rows": [{"month": m, "cpi": c} for m, c in zip(labels, series)],

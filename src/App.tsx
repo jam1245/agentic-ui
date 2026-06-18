@@ -21,6 +21,7 @@ const SUGGESTIONS = [
   "Summarize program health.",
   "Show top risks by likelihood and impact.",
   "Compare SPI across control accounts.",
+  "Show CAM variance for June.",
 ];
 
 export default function App() {

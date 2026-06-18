@@ -9,7 +9,7 @@
 > - **Use `python` (or `py`) instead of `python3`** if `python3` isn't on your PATH (common
 >   on Windows).
 > - **Don't `export` keys — put them in a `.env` file.** Copy `.env.example` to `.env` and
->   fill in `LLM_API_KEY` / `PM_ASSISTANT_ID`. Both the Python backend (`python-dotenv`) and
+>   fill in `LLM_API_KEY` / `LLM_MODEL`. Both the Python backend (`python-dotenv`) and
 >   Vite load `.env` automatically, so you never need `export` (mac/Linux) or `set` /
 >   `$env:` (Windows). On Windows use `copy .env.example .env` (cmd) or
 >   `Copy-Item .env.example .env` (PowerShell) instead of `cp`.
@@ -50,7 +50,7 @@ It runs in **mock mode** (no key) out of the box — `/api/health` reports `mode
 ### Go live with the real Genesis LLM
 
 ```bash
-# copy .env.example → .env and set LLM_API_KEY + PM_ASSISTANT_ID (loaded automatically)
+# copy .env.example → .env and set LLM_API_KEY + LLM_MODEL (loaded automatically)
 #   macOS/Linux: cp .env.example .env   |   Windows: copy .env.example .env
 npm run dev:genesis        # /api/health now reports mode:"genesis"
 ```

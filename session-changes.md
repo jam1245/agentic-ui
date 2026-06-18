@@ -1,6 +1,11 @@
-Here is the markdown content ready to be saved as `SESSION_CHANGES.md`:
+> **STATUS: RESOLVED (superseded).** This log captured the pure-JSON approach and its
+> live-API problems (reasoning leak, "?" replies, ~20% prompt success). Those are fixed by
+> the **hybrid** design — deterministic intent router for structure + the Genesis LLM for
+> prose, with deterministic fallbacks. All canned prompts and follow-ups now work.
+> See [docs/10-genesis-internal-llm.md](docs/10-genesis-internal-llm.md). Kept for history.
 
-```markdown
+---
+
 # Session Changes - Genesis API Integration
 
 **Date:** June 17, 2026  
