@@ -182,21 +182,19 @@ routes each message:
   "which control account is worst?", "why did March dip?") → **do not re-plot**. Pick the
   relevant artifact (by topic), and answer from its full rows.
 
-**How the answer is produced (important):** data-awareness does **not** depend on the LLM
-parsing rows correctly — a reasoning model on a text endpoint proved unreliable (it leaked
-reasoning/symbols). Instead the answer is **computed in Python from the artifact's rows**
-(`_analyze` in [`agent/genesis_agent.py`](../agent/genesis_agent.py)) — highest/lowest,
-average, difference between two points, specific-value lookup, trend, worst risk, worst
-variance, etc. That computed fact is always correct and clean. The LLM is then asked only
-to **reword the correct fact**, and its output is accepted through a **strict filter**
-(rejecting markup, reasoning, odd symbols); if it fails, the computed sentence is shown.
+**How the answer is produced (important):** the LLM does the talking, with the data in
+context — so it can plan, write a director summary, or judge "what should I worry about,"
+not just recite numbers. `_converse` ([`agent/genesis_agent.py`](../agent/genesis_agent.py))
+sends the model a rich brief — the chart's **full rows**, **computed key facts** (min/max/
+avg/trend or scores), and the **canvas inventory** — over the **chat endpoint**, which
+returns the model's *final* answer rather than its chain-of-thought (the source of the
+earlier junk). The output is extracted/cleaned; if it's still unusable, we fall back to
+`_analyze`, a deterministic answer computed from the rows (always correct, always clean).
 
-By default the **computed sentence is the answer** — it's already clean and professional, so
-there's no dependence on the model behaving. LLM rewording is **opt-in**
-(`GENESIS_REPHRASE=1`) because a reasoning model on the raw endpoint tends to leak
-scaffolding ("the answer should be: we have…"); when enabled, it only rewords a correct
-fact and must pass the strict filter, else the computed sentence is shown. Set
-`GENESIS_DEBUG=1` to print the raw model output and see exactly what it returned.
+So the LLM shines when it can, and the reply is never broken or content-free. Controls:
+`GENESIS_NO_LLM=1` forces deterministic answers; `GENESIS_CHAT_PATH` overrides the chat
+route; `GENESIS_DEBUG=1` prints the raw model output. Offline (mock) always uses the
+deterministic path.
 
 > **Toward a multi-plot canvas:** this is exactly the mechanism that scales to a canvas of
 > many triggered plots. Every plot pushes its `ArtifactContext` (rows + digest) into the

@@ -82,16 +82,17 @@ Turn that into an executive summary.
 Compare CPI to SPI.
 ```
 
-**How answers stay correct:** every answer is **computed from the chart's rows in Python**
-(highest/lowest/average/difference/specific value/trend/worst-risk/worst-variance/specific
-risk), so the numbers are always right and the text is always clean. That computed sentence
-is shown directly by default. LLM rewording is **opt-in** via `GENESIS_REPHRASE=1` (and even
-then, only clean output is accepted — otherwise the computed sentence is used), because the
-reasoning model tends to leak scaffolding like "the answer should be: we have…".
+**How answers work:** with a real key, the **LLM answers conversationally** — it gets the
+chart's rows + computed key facts + the canvas inventory over the chat endpoint, so it can
+plan, summarize for a director, or judge what's concerning. If its output is unusable, a
+**deterministic answer computed from the rows** is shown instead (always correct + clean), so
+you never see broken or content-free replies. In **mock mode** you always get the
+deterministic answers.
 
-**Seeing what the live model returns:** set `GENESIS_DEBUG=1` before `npm run dev:genesis`
-(or the server) to print each raw model response to the terminal — useful if a reworded
-answer looks off, so we can tune the API call.
+**Controls:** `GENESIS_NO_LLM=1` forces deterministic answers (max reliability);
+`GENESIS_CHAT_PATH` overrides the chat route if your gateway differs; `GENESIS_DEBUG=1`
+prints each raw model response to the terminal — paste a couple of those `[genesis chat]`
+lines if a live answer looks off and we'll tune from there.
 
 ### Go live with the real Genesis LLM
 

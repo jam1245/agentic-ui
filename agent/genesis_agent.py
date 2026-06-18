@@ -162,55 +162,68 @@ class TurnResult:
 # --------------------------------------------------------------------------------------
 # Answering questions about the data.
 #
-# DESIGN (revised): the chat's data-awareness must NOT depend on a reasoning model
-# producing clean prose — that proved unreliable (junk/symbols leaked through). Instead we
-# COMPUTE the answer from the artifact's rows in Python (always correct, always clean), and
-# use the LLM only to *rephrase that correct fact*, accepted through a strict gate. If the
-# model returns anything messy, we show the computed answer. The user always gets a
-# data-grounded reply.
+# DESIGN: let the LLM actually CONVERSE — handle open-ended asks ("generate a plan",
+# "summarize for a director", "what should I worry about") with real insight. We give it a
+# rich data brief (the chart's rows + computed key facts + the canvas inventory) and call
+# the CHAT endpoint, which returns the model's FINAL answer rather than its chain-of-thought
+# (the source of the earlier junk). We extract/clean defensively; if the model still returns
+# something unusable (or we're offline/forced), we fall back to a deterministic, data-
+# grounded answer from `_analyze`. So: the LLM shines when it can, and the reply is never
+# broken or content-free.
 # --------------------------------------------------------------------------------------
 
-# Reject anything that isn't a clean answer: reasoning, scaffolding, markup, symbols.
-_BAD_SUBSTR = (
-    "<|", "|>", "```", "{", "}", "<", ">", "|", "`", "#", "*", "...", "…",
-    "analysis", "channel",
-    # reasoning / scaffolding the model leaks (the exact failures seen in testing):
-    "we need", "we have", "we should", "we can", "we want", "we could", "we'll", "we must",
-    "the user", "the answer", "let me", "let's", "i should", "i'll", "i need", "first,",
-    "here's", "here is", "answer:", "must be", "should be",
+# Smells that mean the model leaked its reasoning instead of an answer → reject, fall back.
+_REASON_SMELL = (
+    "<|", "```", "we need to", "we have to", "the user wants", "the answer should",
+    "the answer must", "let me think", "i should", "analysis", "channel",
 )
-_PLAIN = re.compile(r"^[\x20-\x7e–—‘’“”\n ]+$")  # ASCII + dashes/quotes only
 
 
-def _strict_clean(text: str) -> str:
-    """Return clean one-line prose, or '' to reject (caller falls back to the computed fact)."""
-    t = (text or "").strip().strip('"').strip()
-    if len(t) < 12:
-        return ""
-    if any(b in t.lower() for b in _BAD_SUBSTR):
-        return ""
-    if not _PLAIN.match(t):  # any non-ASCII symbol / emoji / harmony token → reject
-        return ""
-    t = t.split("\n")[0].strip()
-    return t if len(t) <= 400 else t[:400].rsplit(" ", 1)[0] + "…"
+def _extract_final(text: str) -> str:
+    """Pull the model's final answer out of reasoning-model output (harmony channels, etc.)."""
+    t = text or ""
+    for marker in ("<|channel|>final<|message|>", "assistantfinal", "final<|message|>", "<|message|>"):
+        if marker in t:
+            t = t.split(marker)[-1]
+    t = re.sub(r"<\|[^|]*\|>", " ", t)        # strip any remaining harmony tokens
+    return t.strip().strip('"').strip()
 
 
-def _rephrase(client, fact: str) -> str:
-    """The computed fact IS the answer. LLM rewording is OPT-IN (GENESIS_REPHRASE=1) because
-    the reasoning model tends to leak scaffolding ("the answer should be: we have…"). When
-    enabled, the model only rewords a correct fact and must pass the strict filter."""
-    if os.getenv("GENESIS_REPHRASE") != "1" or getattr(client, "is_mock", False):
-        return fact
+def _usable(text: str) -> bool:
+    """Accept multi-sentence conversational answers; reject leaked reasoning/markup."""
+    t = (text or "").strip()
+    if len(t) < 15:
+        return False
+    low = t.lower()
+    return not any(s in low for s in _REASON_SMELL)
+
+
+def _converse(client, session: GenesisSession, question: str, art: ArtifactContext) -> Optional[str]:
+    """Let the real LLM answer conversationally with the chart's data in context. Returns
+    None to signal 'use the deterministic fallback' (mock, disabled, or unusable output)."""
+    if getattr(client, "is_mock", False) or os.getenv("GENESIS_NO_LLM") == "1":
+        return None
+    rows = art.fullData or []
+    canvas = ", ".join(d.title for d in list_digests(session.state)) or "none"
+    system = (
+        "You are a seasoned program-management analyst talking with a program team about charts "
+        "already on their screen. Answer in 2-5 sentences of plain prose: cite the actual numbers, "
+        "explain what they mean for the program, and give practical, actionable guidance. Do not "
+        "show your reasoning, no markdown headers, no bullet lists unless explicitly asked."
+    )
+    user = (
+        f"Charts on screen: {canvas}.\n"
+        f'Focus chart: "{art.title}".\n'
+        f"Data rows: {json.dumps(rows)}\n"
+        f"Key facts (computed, authoritative): {_key_facts(art, rows)}\n\n"
+        f"Question: {question}"
+    )
     try:
-        out = client.ask(
-            "Rephrase the following as one natural sentence for a program manager. Keep every "
-            "number exactly. Output ONLY the sentence — no preamble, markdown, or lists.\nFact: " + fact,
-            raw=True,
-            max_tokens=120,
-        )
+        raw = client.converse(system, user, max_tokens=600)
     except Exception:
-        return fact
-    return _strict_clean(out) or fact
+        return None
+    answer = _extract_final(raw)
+    return answer if _usable(answer) else None
 
 
 def _num(v) -> Optional[float]:
@@ -218,6 +231,32 @@ def _num(v) -> Optional[float]:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _key_facts(art: ArtifactContext, rows: list) -> str:
+    """A compact, CORRECT summary of the rows (min/max/avg/trend or scores) handed to the LLM
+    alongside the raw data so it grounds its answer in real numbers instead of guessing."""
+    fields = art.fields or {}
+    x, y, label = fields.get("x"), fields.get("y"), fields.get("label")
+    if x and y and label and rows:  # risk matrix
+        scored = sorted(
+            ((str(r.get(label)), (_num(r.get(x)) or 0) * (_num(r.get(y)) or 0)) for r in rows),
+            key=lambda s: -s[1],
+        )
+        return "likelihood×impact scores: " + ", ".join(f"{n}={s:g}" for n, s in scored)
+    if x and y and rows and any(_num(r.get(y)) is not None for r in rows):
+        pts = [(str(r.get(x)), _num(r.get(y))) for r in rows if _num(r.get(y)) is not None]
+        lo, hi = min(pts, key=lambda p: p[1]), max(pts, key=lambda p: p[1])
+        avg = sum(v for _, v in pts) / len(pts)
+        return (
+            f"min {lo[1]:g} ({lo[0]}), max {hi[1]:g} ({hi[0]}), avg {avg:.2f}, "
+            f"first {pts[0][1]:g} ({pts[0][0]}), last {pts[-1][1]:g} ({pts[-1][0]})"
+        )
+    if rows and "label" in rows[0] and "value" in rows[0]:
+        return ", ".join(f"{r.get('label')}={r.get('value')}" for r in rows)
+    if rows:
+        return "; ".join(", ".join(f"{k}={r.get(k)}" for k in rows[0]) for r in rows[:6])
+    return art.summaryForFutureTurns
 
 
 def _analyze(question: str, art: ArtifactContext, rows: list) -> str:
@@ -354,12 +393,13 @@ def _digests(session: GenesisSession) -> list[dict]:
 # --------------------------------------------------------------------------------------
 
 def _answer_about_data(client, session: GenesisSession, question: str, art: ArtifactContext) -> TurnResult:
-    """Compute a correct answer from the chart's rows, then (optionally) let the LLM reword
-    it. The computed fact is always data-grounded; the LLM never invents numbers."""
+    """Answer a question about a plotted chart. The LLM converses with the data in context
+    (so it can plan, summarize for a director, judge what's concerning); if its output is
+    unusable — or we're offline — we fall back to a deterministic, data-grounded answer."""
     rows = art.fullData or []
-    grounded = _analyze(question, art, rows)
+    answer = _converse(client, session, question, art) or _analyze(question, art, rows)
     return TurnResult(
-        _rephrase(client, grounded), [], _digests(session),
+        answer, [], _digests(session),
         [{"artifactId": art.artifactId, "title": art.title}],
     )
 
@@ -367,8 +407,8 @@ def _answer_about_data(client, session: GenesisSession, question: str, art: Arti
 def _make_chart(client, session: GenesisSession, question: str, intent: ChartIntent) -> TurnResult:
     result = TOOLS[intent.tool](**intent.args)
     payload = _build_payload(intent, result)
-    # The deterministic takeaway is already accurate; let the LLM only reword it.
-    summary = _rephrase(client, intent.summary)
+    # The chart itself carries the detail; a deterministic one-line takeaway is reliable.
+    summary = intent.summary
     artifact = to_artifact_context(
         payload,
         original_user_question=question,

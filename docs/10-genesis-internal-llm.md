@@ -107,7 +107,7 @@ Browser (App.tsx, "/") ──POST /api/chat──► server/genesis_app.py
               ▼                                 ▼                              ▼
    data_tools.* (real rows)        _analyze(rows) → the answer        artifacts registry
    (the numbers)                   (computed in Python, always clean)  (session state)
-              │                     └ optional LLM reword if GENESIS_REPHRASE=1 ┘
+              │     LLM converses (chat endpoint) over rows+facts; _analyze fallback ┘
               └──────► validated AgentUIPayload + ArtifactContext ◄────────────┘
                                                │
                     { text, payloads, artifacts, context_used } → <AgentUIRenderer>
@@ -143,8 +143,9 @@ Files:
 - [`agent/genesis_client.py`](../agent/genesis_client.py) — `POST /completions` client
   (stateless; conversation context is rebuilt each turn) + `MockGenesisClient` for offline.
 - [`agent/genesis_agent.py`](../agent/genesis_agent.py) — the **hybrid loop**: deterministic
-  `route_chart` for structure + data and `_analyze` to answer questions from the rows; the
-  LLM only rewords (opt-in). Stores artifacts and answers follow-ups (`why did March dip?`).
+  `route_chart` for structure + data; `_converse` answers questions conversationally via the
+  chat endpoint with the rows in context; `_analyze` is the deterministic fallback. Stores
+  artifacts and answers follow-ups (`why did March dip?`).
 - [`server/genesis_app.py`](../server/genesis_app.py) — FastAPI: `POST /api/chat`,
   `GET /api/artifacts`, `GET /api/health`. In-memory per-session client + registry.
 - [`src/genesis/useGenesisChat.ts`](../src/genesis/useGenesisChat.ts) + [`src/App.tsx`](../src/App.tsx)
@@ -165,10 +166,12 @@ Files:
 3. **a generic follow-up** ("summarize that") → answer from the most recent artifact.
 4. **anything else** → a short helpful guidance message (never a bare "?").
 
-The answer text is **computed in Python** (always correct + clean). The LLM is asked to
-reword it **only when `GENESIS_REPHRASE=1`**, and only clean output passes the filter;
-otherwise the computed sentence is shown. Any payload that fails validation degrades to a
-table ([08](08-validation-and-fallbacks.md)). `GENESIS_DEBUG=1` prints raw model output.
+For questions about data (case 1 & 3), the **LLM answers conversationally** via the chat
+endpoint with the rows + computed facts in context (so it can plan, summarize for a
+director, judge what's concerning); if its output is unusable, a deterministic answer
+computed from the rows is shown instead. `GENESIS_NO_LLM=1` forces the deterministic path;
+`GENESIS_DEBUG=1` prints raw model output; `GENESIS_CHAT_PATH` overrides the chat route. Any
+payload that fails validation degrades to a table ([08](08-validation-and-fallbacks.md)).
 
 ## Why this still satisfies both contracts
 

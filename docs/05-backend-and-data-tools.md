@@ -9,7 +9,7 @@ is optional polish (see below).
 ```
 DATA tools  = data access / computation        → return rows      (agent/data_tools.py)
 AGENT loop  = deterministic router + analytics  → payload + artifact + answers (agent/genesis_agent.py)
-LLM         = internal Genesis Completions API  → optional rewording only (agent/genesis_client.py)
+LLM         = internal Genesis (chat endpoint)  → conversational answers + fallback (agent/genesis_client.py)
 ```
 
 ## Data tools — your MCP / enterprise layer
@@ -39,11 +39,14 @@ treats the model as optional:
 - **`route_chart(question)`** deterministically maps a chart request to a data tool +
   component + field mapping (structure can't be broken by the model),
 - the **data tool** supplies the real rows (the model never fabricates numbers),
-- **`_analyze(question, artifact, rows)`** computes the answer to a *question about plotted
-  data* — highest/lowest, average, difference, specific lookup, trend, top/least risk,
-  worst variance — directly from the rows. This is always correct and clean.
-- the **LLM** is used **only to reword** a computed fact, and only when `GENESIS_REPHRASE=1`,
-  passing a strict filter; otherwise (and by default) the computed sentence is shown.
+- **`_converse(...)`** answers *questions about plotted data* by sending the LLM a rich brief
+  (the chart's rows + computed key facts + the canvas inventory) over the **chat endpoint**,
+  which returns the model's final answer (not its chain-of-thought). This lets it converse —
+  plans, director summaries, "what should I worry about" — not just recite numbers.
+- **`_analyze(question, artifact, rows)`** is the deterministic fallback: if the LLM output is
+  unusable (or `GENESIS_NO_LLM=1`, or offline/mock), it computes the answer from the rows
+  (highest/lowest, average, difference, specific lookup, trend, top/least risk, worst
+  variance) — always correct and clean. So the reply is never broken or content-free.
 
 We assemble + validate an `AgentUIPayload` (pydantic), store an `ArtifactContext`, and
 return both. Questions about a chart rehydrate its rows from the artifact registry and are

@@ -119,6 +119,44 @@ class GenesisClient:
         json_start = text.find("{")
         return text[json_start:] if json_start > 0 else text
 
+    def converse(self, system: str, user: str, *, max_tokens: int = 600) -> str:
+        """Chat-completions call for conversational answers.
+
+        Returns the model's FINAL message (`choices[0].message.content`). For reasoning
+        models like gpt-oss the chat endpoint keeps the chain-of-thought OUT of `content`
+        (it goes to a separate `reasoning_content`), which is why this is preferred over raw
+        /completions for prose. Falls back to /completions if the chat route isn't available.
+        """
+        path = os.getenv("GENESIS_CHAT_PATH", "/chat/completions")
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.4,
+        }
+        try:
+            resp = requests.post(self.base_url + path, headers=self._headers, json=payload, timeout=self.timeout)
+            if resp.status_code == 200:
+                msg = resp.json()["choices"][0]["message"]
+                text = (msg.get("content") or "").strip()
+                if os.getenv("GENESIS_DEBUG") == "1":
+                    import sys
+                    print(f"[genesis chat] {text[:600]!r}", file=sys.stderr)
+                if text:
+                    return text
+            elif os.getenv("GENESIS_DEBUG") == "1":
+                import sys
+                print(f"[genesis chat HTTP {resp.status_code}] {resp.text[:300]}", file=sys.stderr)
+        except Exception as e:  # noqa: BLE001
+            if os.getenv("GENESIS_DEBUG") == "1":
+                import sys
+                print(f"[genesis chat error] {e}", file=sys.stderr)
+        # Fallback to plain completions (its output is cleaned/extracted by the caller).
+        return self.ask(f"{system}\n\n{user}\n\nAnswer:", raw=True, max_tokens=max_tokens)
+
 
 class MockGenesisClient:
     """Offline stand-in. Returns canned action JSON for the canonical demo questions so the
@@ -138,7 +176,10 @@ class MockGenesisClient:
         return self.thread_id
 
     def ask(self, prompt: str, *, raw: bool = False, max_tokens: Optional[int] = None) -> str:
-        # Not used in the hybrid loop (it checks is_mock and uses deterministic prose), but
+        # Not used in the hybrid loop (it checks is_mock and uses deterministic text), but
         # kept so the interface matches the real client. Returns an empty string so any
         # accidental call cleanly falls back to deterministic text.
         return ""
+
+    def converse(self, system: str, user: str, *, max_tokens: int = 600) -> str:
+        return ""  # offline → caller (genesis_agent) uses the deterministic answer
