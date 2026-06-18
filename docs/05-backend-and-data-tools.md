@@ -1,13 +1,15 @@
 # 5. Backend & Data Tools
 
-The backend has three jobs: **fetch data** (from MCP / enterprise systems), **let the LLM
-choose a visualization**, and **emit the two contracts** (render payload + artifact). The
-LLM is the internal **Genesis** assistant — no Google ADK, no Google key.
+The backend has three jobs: **fetch data** (from MCP / enterprise systems), **pick the
+visualization and answer questions about it**, and **emit the two contracts** (render
+payload + artifact). The LLM is the internal **Genesis** model — no Google ADK, no Google
+key. Crucially, the structure and the answers are **computed deterministically**; the LLM
+is optional polish (see below).
 
 ```
-DATA tools  = data access / computation     → return rows      (agent/data_tools.py)
-AGENT loop  = hybrid router + LLM prose      → payload + artifact (agent/genesis_agent.py)
-LLM         = internal Genesis Completions API                  (agent/genesis_client.py)
+DATA tools  = data access / computation        → return rows      (agent/data_tools.py)
+AGENT loop  = deterministic router + analytics  → payload + artifact + answers (agent/genesis_agent.py)
+LLM         = internal Genesis Completions API  → optional rewording only (agent/genesis_client.py)
 ```
 
 ## Data tools — your MCP / enterprise layer
@@ -30,18 +32,22 @@ into the payload's `metadata` and the artifact's provenance — for free.
 
 ## The hybrid agent loop
 
-`gpt-oss-120b` is a reasoning model that resists strict-JSON output, so
-[`agent/genesis_agent.py`](../agent/genesis_agent.py) splits the work:
+`gpt-oss-120b` is a reasoning model that resists clean structured output, so
+[`agent/genesis_agent.py`](../agent/genesis_agent.py) does the reliable work in Python and
+treats the model as optional:
 
-- **`route_chart(question)`** deterministically maps the question to a data tool +
+- **`route_chart(question)`** deterministically maps a chart request to a data tool +
   component + field mapping (structure can't be broken by the model),
 - the **data tool** supplies the real rows (the model never fabricates numbers),
-- the **LLM** writes the takeaway sentence and answers follow-ups (`client.ask(..., raw=True)`),
-  with a deterministic fallback if it returns junk or we're offline.
+- **`_analyze(question, artifact, rows)`** computes the answer to a *question about plotted
+  data* — highest/lowest, average, difference, specific lookup, trend, top/least risk,
+  worst variance — directly from the rows. This is always correct and clean.
+- the **LLM** is used **only to reword** a computed fact, and only when `GENESIS_REPHRASE=1`,
+  passing a strict filter; otherwise (and by default) the computed sentence is shown.
 
 We assemble + validate an `AgentUIPayload` (pydantic), store an `ArtifactContext`, and
-return both. Follow-ups rehydrate prior rows from the artifact registry. Full walkthrough:
-[10](10-genesis-internal-llm.md).
+return both. Questions about a chart rehydrate its rows from the artifact registry and are
+answered by `_analyze`. Full walkthrough: [10](10-genesis-internal-llm.md).
 
 ## The visualization mapping (deterministic router)
 

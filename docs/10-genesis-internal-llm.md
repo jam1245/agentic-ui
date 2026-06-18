@@ -103,11 +103,11 @@ Browser (App.tsx, "/") ──POST /api/chat──► server/genesis_app.py
                                        agent/genesis_agent.run_turn()  (hybrid)
                                                │
    route_chart(question) ─ deterministic ──────┤
-              │                                 │
+              │                                 │                              │
               ▼                                 ▼                              ▼
-   data_tools.* (real rows)        GenesisClient.ask(prose, raw=True)   artifacts registry
-   (the numbers)                   POST /completions (the takeaway)     (session state)
-              │                                 │ (deterministic fallback)     │
+   data_tools.* (real rows)        _analyze(rows) → the answer        artifacts registry
+   (the numbers)                   (computed in Python, always clean)  (session state)
+              │                     └ optional LLM reword if GENESIS_REPHRASE=1 ┘
               └──────► validated AgentUIPayload + ArtifactContext ◄────────────┘
                                                │
                     { text, payloads, artifacts, context_used } → <AgentUIRenderer>
@@ -142,9 +142,9 @@ sequenceDiagram
 Files:
 - [`agent/genesis_client.py`](../agent/genesis_client.py) — `POST /completions` client
   (stateless; conversation context is rebuilt each turn) + `MockGenesisClient` for offline.
-- [`agent/genesis_agent.py`](../agent/genesis_agent.py) — the **hybrid loop**: a
-  deterministic `route_chart` for structure + data, the LLM for prose, deterministic
-  fallbacks so nothing breaks. Stores artifacts and answers follow-ups (`why did March dip?`).
+- [`agent/genesis_agent.py`](../agent/genesis_agent.py) — the **hybrid loop**: deterministic
+  `route_chart` for structure + data and `_analyze` to answer questions from the rows; the
+  LLM only rewords (opt-in). Stores artifacts and answers follow-ups (`why did March dip?`).
 - [`server/genesis_app.py`](../server/genesis_app.py) — FastAPI: `POST /api/chat`,
   `GET /api/artifacts`, `GET /api/health`. In-memory per-session client + registry.
 - [`src/genesis/useGenesisChat.ts`](../src/genesis/useGenesisChat.ts) + [`src/App.tsx`](../src/App.tsx)
@@ -154,19 +154,21 @@ Files:
 
 ### How a turn is decided (the hybrid router)
 
-`run_turn` resolves each message deterministically, then layers LLM prose on top:
+`run_turn` resolves each message deterministically:
 
-1. **"why did March dip?"** → rehydrate the stored CPI chart's rows, answer in prose,
-   set `context_used` (drives the 🧠 badge).
+1. **a question about plotted data** ("explain the difference between Jan and Jun CPI",
+   "which control account is worst?", "why did March dip?") → pick the relevant artifact,
+   rehydrate its rows, and **compute** the answer with `_analyze`; set `context_used`
+   (drives the 🧠 badge).
 2. **a fresh chart request** (CPI / SPI / risks / health / CAM) → run the data tool, build +
-   validate the `AgentUIPayload`, store the artifact, write a one-line takeaway.
-3. **a generic follow-up** ("summarize that", "explain this") → answer from the most recent
-   artifact's stored context.
+   validate the `AgentUIPayload`, store the artifact, attach a one-line takeaway.
+3. **a generic follow-up** ("summarize that") → answer from the most recent artifact.
 4. **anything else** → a short helpful guidance message (never a bare "?").
 
-Prose comes from the real model (`client.ask(..., raw=True)`); if it returns reasoning
-junk, or you're in mock mode, a deterministic sentence is used instead. Any payload that
-fails validation degrades to a table ([08](08-validation-and-fallbacks.md)).
+The answer text is **computed in Python** (always correct + clean). The LLM is asked to
+reword it **only when `GENESIS_REPHRASE=1`**, and only clean output passes the filter;
+otherwise the computed sentence is shown. Any payload that fails validation degrades to a
+table ([08](08-validation-and-fallbacks.md)). `GENESIS_DEBUG=1` prints raw model output.
 
 ## Why this still satisfies both contracts
 
