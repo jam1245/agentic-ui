@@ -83,10 +83,11 @@ Compare CPI to SPI.
 ```
 
 **How answers stay correct:** every answer is **computed from the chart's rows in Python**
-(highest/lowest/average/difference/specific value/trend/worst-risk/worst-variance), so the
-numbers are always right and the text is always clean. The Genesis LLM is asked only to
-*reword* that correct fact, and only clean output is accepted — otherwise you see the
-computed sentence. In **mock mode** you get the computed sentences directly.
+(highest/lowest/average/difference/specific value/trend/worst-risk/worst-variance/specific
+risk), so the numbers are always right and the text is always clean. That computed sentence
+is shown directly by default. LLM rewording is **opt-in** via `GENESIS_REPHRASE=1` (and even
+then, only clean output is accepted — otherwise the computed sentence is used), because the
+reasoning model tends to leak scaffolding like "the answer should be: we have…".
 
 **Seeing what the live model returns:** set `GENESIS_DEBUG=1` before `npm run dev:genesis`
 (or the server) to print each raw model response to the terminal — useful if a reworded

@@ -191,9 +191,12 @@ variance, etc. That computed fact is always correct and clean. The LLM is then a
 to **reword the correct fact**, and its output is accepted through a **strict filter**
 (rejecting markup, reasoning, odd symbols); if it fails, the computed sentence is shown.
 
-So: **the numbers always come from the data**; the model only affects phrasing. Offline
-(mock) you get the computed sentences directly. Set `GENESIS_DEBUG=1` to print the raw
-model output and see exactly what it returned.
+By default the **computed sentence is the answer** — it's already clean and professional, so
+there's no dependence on the model behaving. LLM rewording is **opt-in**
+(`GENESIS_REPHRASE=1`) because a reasoning model on the raw endpoint tends to leak
+scaffolding ("the answer should be: we have…"); when enabled, it only rewords a correct
+fact and must pass the strict filter, else the computed sentence is shown. Set
+`GENESIS_DEBUG=1` to print the raw model output and see exactly what it returned.
 
 > **Toward a multi-plot canvas:** this is exactly the mechanism that scales to a canvas of
 > many triggered plots. Every plot pushes its `ArtifactContext` (rows + digest) into the

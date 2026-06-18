@@ -20,6 +20,7 @@ Numbers always come from the data tools — never invented by the model.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -169,35 +170,41 @@ class TurnResult:
 # data-grounded reply.
 # --------------------------------------------------------------------------------------
 
-# Reject anything that isn't plain prose: reasoning, markup, harmony tokens, odd symbols.
+# Reject anything that isn't a clean answer: reasoning, scaffolding, markup, symbols.
 _BAD_SUBSTR = (
-    "<|", "|>", "```", "{", "}", "<", ">", "|", "`", "#", "*",
-    "analysis", "channel", "we need", "the user", "let me", "i should", "first,", "i need to",
+    "<|", "|>", "```", "{", "}", "<", ">", "|", "`", "#", "*", "...", "…",
+    "analysis", "channel",
+    # reasoning / scaffolding the model leaks (the exact failures seen in testing):
+    "we need", "we have", "we should", "we can", "we want", "we could", "we'll", "we must",
+    "the user", "the answer", "let me", "let's", "i should", "i'll", "i need", "first,",
+    "here's", "here is", "answer:", "must be", "should be",
 )
-_PLAIN = re.compile(r"^[\x20-\x7e–—‘’“”\n ]+$")  # ASCII + dashes/quotes
+_PLAIN = re.compile(r"^[\x20-\x7e–—‘’“”\n ]+$")  # ASCII + dashes/quotes only
 
 
 def _strict_clean(text: str) -> str:
     """Return clean one-line prose, or '' to reject (caller falls back to the computed fact)."""
     t = (text or "").strip().strip('"').strip()
-    if len(t) < 6:
+    if len(t) < 12:
         return ""
     if any(b in t.lower() for b in _BAD_SUBSTR):
         return ""
-    if not _PLAIN.match(t):  # any non-ASCII symbol / emoji / token → reject
+    if not _PLAIN.match(t):  # any non-ASCII symbol / emoji / harmony token → reject
         return ""
     t = t.split("\n")[0].strip()
     return t if len(t) <= 400 else t[:400].rsplit(" ", 1)[0] + "…"
 
 
 def _rephrase(client, fact: str) -> str:
-    """Optionally let the LLM reword a CORRECT fact. Never trusted to compute or add data."""
-    if getattr(client, "is_mock", False):
+    """The computed fact IS the answer. LLM rewording is OPT-IN (GENESIS_REPHRASE=1) because
+    the reasoning model tends to leak scaffolding ("the answer should be: we have…"). When
+    enabled, the model only rewords a correct fact and must pass the strict filter."""
+    if os.getenv("GENESIS_REPHRASE") != "1" or getattr(client, "is_mock", False):
         return fact
     try:
         out = client.ask(
             "Rephrase the following as one natural sentence for a program manager. Keep every "
-            "number exactly as given. No preamble, no markdown, no lists.\nFact: " + fact,
+            "number exactly. Output ONLY the sentence — no preamble, markdown, or lists.\nFact: " + fact,
             raw=True,
             max_tokens=120,
         )
@@ -223,13 +230,29 @@ def _analyze(question: str, art: ArtifactContext, rows: list) -> str:
 
     # Risk matrix: rank by likelihood × impact.
     if x and y and label and rows:
-        scored = [(str(r.get(label)), (_num(r.get(x)) or 0) * (_num(r.get(y)) or 0)) for r in rows]
+        scored = [
+            (str(r.get(label)), _num(r.get(x)) or 0, _num(r.get(y)) or 0, (_num(r.get(x)) or 0) * (_num(r.get(y)) or 0))
+            for r in rows
+        ]
         scored = [s for s in scored if s[0]]
         if scored:
-            if any(w in q for w in ("brief", "leadership", "worst", "highest", "top", "biggest", "prioriti", "first")):
-                name, score = max(scored, key=lambda s: s[1])
-                return f'The top risk in {title} is "{name}" (likelihood×impact = {score:g}) — brief that one first.'
-            listing = "; ".join(f"{n} ({s:g})" for n, s in sorted(scored, key=lambda s: -s[1]))
+            band = lambda sc: "high" if sc >= 15 else "moderate" if sc >= 8 else "low"
+            # A specific risk named in the question → describe just that one.
+            for name, lk, im, sc in scored:
+                if name.lower() in q:
+                    return (
+                        f'In {title}, "{name}" has likelihood {lk:g} and impact {im:g} '
+                        f"(score {sc:g}) — a {band(sc)} exposure."
+                    )
+            ranked = sorted(scored, key=lambda s: -s[3])
+            if any(w in q for w in ("brief", "leadership", "important", "prioriti", "focus", "worst", "highest", "top", "biggest", "less")):
+                top, low = ranked[0], ranked[-1]
+                rest = "; ".join(f"{n} ({sc:g})" for n, _lk, _im, sc in ranked)
+                return (
+                    f'Brief leadership on "{top[0]}" (likelihood×impact {top[3]:g}) first; '
+                    f'"{low[0]}" ({low[3]:g}) is the least pressing. Full ranking: {rest}.'
+                )
+            listing = "; ".join(f"{n} ({sc:g})" for n, _lk, _im, sc in ranked)
             return f"{title} ranked by likelihood×impact: {listing}."
 
     # XY series (line / bar charts).
