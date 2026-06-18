@@ -1,69 +1,168 @@
 /**
- * Standalone demo: renders example payloads through the SAME AgentUIRenderer the agent
- * drives in production, AND shows the artifact context the chat agent would retain for
- * follow-up questions. No CopilotKit/agent needed — this proves both contracts in
- * isolation. `npm run dev` to view.
+ * Landing page — the whole story on one screen:
+ *   LEFT  : a LIVE chat powered by the internal Genesis LLM. Canned prompt chips really
+ *           plot; follow-ups are answered from stored context.
+ *   RIGHT : "Under the hood" — the artifact context the agent has ABSORBED (grows as you
+ *           chat), the exact contract payload it emitted (the code), and a gallery of
+ *           every component.
+ *
+ * Run `npm run dev:genesis` (chat works offline via the mock backend; add a Genesis key
+ * to go live). `npm run dev` serves the page too, but the chat needs the backend.
  */
 import { useMemo, useState } from "react";
 import { AgentUIRenderer } from "./components/AgentUIRenderer";
 import { ALL_EXAMPLES } from "./examples/payloads";
-import { newArtifactId, toArtifactContext, toDigest } from "./contract";
+import { useGenesisChat } from "./genesis/useGenesisChat";
 import "./styles.css";
 
-export default function App() {
-  const [active, setActive] = useState(0);
-  const example = ALL_EXAMPLES[active];
+const SUGGESTIONS = [
+  "Show CPI trend for the last six months.",
+  "Why did March dip?",
+  "Summarize program health.",
+  "Show top risks by likelihood and impact.",
+  "Compare SPI across control accounts.",
+];
 
-  // Build the ArtifactContext the way render_ui would, then project to the prompt-safe
-  // digest the chat agent actually sees each turn.
-  const digest = useMemo(() => {
-    const payload = { ...example.payload, artifactId: newArtifactId(example.payload.component) };
-    const ctx = toArtifactContext(payload, {
-      originalUserQuestion: `(${example.key}) example question`,
-      sourceTool: payload.metadata.source,
-      summaryForFutureTurns: payload.metadata.explanation ?? "",
-    });
-    return toDigest(ctx);
-  }, [example]);
+export default function App() {
+  const { turns, artifacts, latestPayload, busy, send } = useGenesisChat();
+  const [input, setInput] = useState("");
+  const [tab, setTab] = useState<"context" | "payload" | "gallery">("context");
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    send(input);
+    setInput("");
+  }
 
   return (
-    <main style={{ maxWidth: 920, margin: "0 auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 20 }}>Agent-driven UI — two-contract demo</h1>
-      <p style={{ color: "#64748b" }}>
-        Each tab is a payload an agent would emit. The same <code>&lt;AgentUIRenderer&gt;</code> renders them all, and
-        the panel below shows the <strong>artifact context</strong> the chat agent keeps for follow-ups.
+    <main className="landing">
+      <header className="landing-head">
+        <h1>Agent-driven UI — program analyst</h1>
+        <p>
+          Your internal <strong>Genesis</strong> LLM turns questions into charts, and remembers the data behind them
+          so follow-ups just work. Try a chip, then ask <em>"why did March dip?"</em>
+        </p>
+      </header>
+
+      <div className="landing-grid">
+        {/* ---------------- LEFT: live chat ---------------- */}
+        <section className="chat-pane">
+          <div className="chat-chips">
+            {SUGGESTIONS.map((s) => (
+              <button key={s} className="chip" onClick={() => send(s)} disabled={busy}>
+                {s}
+              </button>
+            ))}
+          </div>
+
+          <div className="chat-log">
+            {turns.length === 0 && (
+              <div className="chat-empty">Pick a prompt above to start — charts render right here in the chat.</div>
+            )}
+            {turns.map((turn, i) => (
+              <div key={i} className={`bubble bubble--${turn.role}`}>
+                <div className="bubble-role">{turn.role === "user" ? "You" : "Analyst"}</div>
+                {turn.contextUsed && turn.contextUsed.length > 0 && (
+                  <div className="ctx-badge" title="Answered using data already in the conversation">
+                    🧠 used context: {turn.contextUsed.map((c) => c.title).join(", ")}
+                  </div>
+                )}
+                {turn.text && <div className="bubble-text">{turn.text}</div>}
+                {turn.payloads?.map((p, j) => (
+                  <AgentUIRenderer key={j} raw={p} />
+                ))}
+              </div>
+            ))}
+            {busy && <div className="chat-thinking">Analyst is thinking…</div>}
+          </div>
+
+          <form className="chat-input" onSubmit={submit}>
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask about CPI, SPI, risks, program health…"
+            />
+            <button type="submit" disabled={busy}>
+              Send
+            </button>
+          </form>
+        </section>
+
+        {/* ---------------- RIGHT: under the hood ---------------- */}
+        <section className="hood-pane">
+          <div className="hood-tabs">
+            <button className={tab === "context" ? "on" : ""} onClick={() => setTab("context")}>
+              Context ({artifacts.length})
+            </button>
+            <button className={tab === "payload" ? "on" : ""} onClick={() => setTab("payload")}>
+              Payload
+            </button>
+            <button className={tab === "gallery" ? "on" : ""} onClick={() => setTab("gallery")}>
+              Gallery
+            </button>
+          </div>
+
+          {tab === "context" && <ContextPanel artifacts={artifacts} />}
+          {tab === "payload" && <PayloadPanel payload={latestPayload} />}
+          {tab === "gallery" && <Gallery />}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function ContextPanel({ artifacts }: { artifacts: ReturnType<typeof useGenesisChat>["artifacts"] }) {
+  return (
+    <div className="hood-body">
+      <p className="hood-hint">
+        Every chart the agent renders is also stored here as a compact <strong>digest</strong> (summary + schema +
+        sample) — this is what gets fed into future prompts so the chat stays data-aware. The full rows stay out of the
+        prompt and are rehydrated only when a follow-up needs them.
       </p>
-      <nav style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "16px 0" }}>
+      {artifacts.length === 0 && <div className="chat-empty">No data absorbed yet — ask for a chart.</div>}
+      {artifacts.map((a) => (
+        <div key={a.artifactId} className="ctx-card">
+          <div className="ctx-title">{a.title}</div>
+          <div className="ctx-summary">{a.summary}</div>
+          <div className="ctx-meta">
+            {a.artifactType} · {a.rowCount} rows · fields: {Object.entries(a.fields).map(([k, v]) => `${k}=${v}`).join(", ") || "—"}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PayloadPanel({ payload }: { payload: ReturnType<typeof useGenesisChat>["latestPayload"] }) {
+  return (
+    <div className="hood-body">
+      <p className="hood-hint">
+        The exact <strong>AgentUIPayload</strong> the agent emitted for the last chart — validated, then rendered by the
+        generic <code>&lt;AgentUIRenderer&gt;</code>. This is the agent-to-UI contract.
+      </p>
+      {payload ? (
+        <pre className="hood-code">{JSON.stringify(payload, null, 2)}</pre>
+      ) : (
+        <div className="chat-empty">Render a chart to see its payload.</div>
+      )}
+    </div>
+  );
+}
+
+function Gallery() {
+  const [active, setActive] = useState(0);
+  const example = useMemo(() => ALL_EXAMPLES[active], [active]);
+  return (
+    <div className="hood-body">
+      <p className="hood-hint">Every component the agent can choose from, rendered from a static example payload.</p>
+      <div className="gallery-tabs">
         {ALL_EXAMPLES.map((ex, i) => (
-          <button
-            key={ex.key}
-            onClick={() => setActive(i)}
-            style={{
-              border: "1px solid #e2e8f0",
-              background: i === active ? "#2563eb" : "#fff",
-              color: i === active ? "#fff" : "#0f172a",
-              borderRadius: 8,
-              padding: "4px 12px",
-              cursor: "pointer",
-            }}
-          >
+          <button key={ex.key} className={i === active ? "on" : ""} onClick={() => setActive(i)}>
             {ex.key}
           </button>
         ))}
-      </nav>
-
+      </div>
       <AgentUIRenderer raw={example.payload} />
-
-      <section style={{ marginTop: 8, border: "1px dashed #cbd5e1", borderRadius: 10, padding: 16, background: "#f8fafc" }}>
-        <h3 style={{ margin: "0 0 8px", fontSize: 14 }}>
-          🧠 What the chat agent remembers (compact digest — fed to the prompt each turn)
-        </h3>
-        <p style={{ margin: "0 0 8px", fontSize: 12, color: "#64748b" }}>
-          The full dataset stays out of the prompt; only this digest + a data reference are injected. Follow-ups like
-          "why did March dip?" use the summary, then rehydrate full rows on demand.
-        </p>
-        <pre style={{ margin: 0, fontSize: 12, overflowX: "auto" }}>{JSON.stringify(digest, null, 2)}</pre>
-      </section>
-    </main>
+    </div>
   );
 }

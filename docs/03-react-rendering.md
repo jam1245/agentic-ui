@@ -95,10 +95,10 @@ description (re-export the JSON Schema and redeploy the agent).
 ## Interactivity / drill-down
 
 Display-only is the common case. When a component must send a result back to the agent
-(user clicks a risk → agent fetches its mitigation), use CopilotKit's
-`renderAndWaitForResponse` — see
-[`src/copilotkit/InteractiveAgentUI.tsx`](../src/copilotkit/InteractiveAgentUI.tsx) and
-[04-copilotkit-agui-integration.md](04-copilotkit-agui-integration.md). The user's
-selection flows back over AG-UI events and the agent continues the run.
+(user clicks a risk → agent fetches its mitigation), post the selection back as the next
+chat turn — the same `POST /api/chat` path the chat input uses — and the agent continues
+with that selection in context. (If you later adopt CopilotKit, its
+`renderAndWaitForResponse` does the same round trip over AG-UI events; see
+[04-frontend-integration.md](04-frontend-integration.md).)
 
-Next: [wiring this to the agent →](04-copilotkit-agui-integration.md)
+Next: [the backend & data tools →](05-backend-and-data-tools.md)

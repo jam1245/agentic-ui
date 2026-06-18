@@ -7,9 +7,9 @@ not change the contracts: Genesis drives the **same** `AgentUIPayload` + `Artifa
 rendered by the **same** `<AgentUIRenderer>` as every other tier.
 
 > Key idea: Genesis returns *text*, not native tool calls. So we give it a tiny JSON
-> "action" protocol and run the same reasoning loop our ADK agent runs. The model picks
-> the data tool and the visualization; **our code supplies the real numbers** (from the
-> data tools) so the model never fabricates data.
+> "action" protocol and run a reasoning loop over it. The model picks the data tool and the
+> visualization; **our code supplies the real numbers** (from the data tools) so the model
+> never fabricates data.
 
 ## Zero → working in one command (no key needed)
 
@@ -24,7 +24,7 @@ python3 scripts/genesis_demo.py --mock
 python3 -m pip install -r agent/requirements.txt
 npm install
 npm run dev:genesis      # starts the Genesis backend (mock) + Vite
-# open http://localhost:5173/genesis.html
+# open http://localhost:5173/  → chat on the left, context/payload/gallery on the right
 ```
 
 `/api/health` returns `{"mode":"mock"}` until you add a key.
@@ -53,7 +53,7 @@ The server auto-detects: if `LLM_API_KEY` + `PM_ASSISTANT_ID` are present (and
 ## How it works
 
 ```
-Browser (genesis.html) ──POST /api/chat──► server/genesis_app.py
+Browser (App.tsx, "/") ──POST /api/chat──► server/genesis_app.py
                                                │
                                        agent/genesis_agent.run_turn()
                                                │
@@ -74,8 +74,9 @@ Files:
   validated payloads, stores artifacts, handles drill-down (`get_artifact`).
 - [`server/genesis_app.py`](../server/genesis_app.py) — FastAPI: `POST /api/chat`,
   `GET /api/artifacts`, `GET /api/health`. In-memory per-session client + registry.
-- [`src/genesis/GenesisChat.tsx`](../src/genesis/GenesisChat.tsx) — plain-fetch chat that
-  renders returned payloads with `<AgentUIRenderer>`.
+- [`src/genesis/useGenesisChat.ts`](../src/genesis/useGenesisChat.ts) + [`src/App.tsx`](../src/App.tsx)
+  — the landing page's plain-fetch chat that renders returned payloads with `<AgentUIRenderer>`
+  and shows the context/payload panels.
 - [`scripts/genesis_demo.py`](../scripts/genesis_demo.py) — CLI proof (`--mock` or real).
 
 ### The action protocol the assistant follows
@@ -109,17 +110,20 @@ plain text reply, and any payload that fails validation degrades to a table
   via `get_artifact`. Exactly the behavior proven in
   [09-artifact-aware-context.md](09-artifact-aware-context.md).
 
-## Genesis vs. the ADK path — which to use
+## Transport: now vs. later
 
-| | Genesis lane (this page) | ADK + CopilotKit (Tier 4) |
+Genesis is the only LLM backend here, reached over a simple HTTP transport. If you later
+adopt CopilotKit/AG-UI, only the transport changes — the contracts and renderers don't:
+
+| | This repo (HTTP) | If you adopt CopilotKit/AG-UI |
 | --- | --- | --- |
-| LLM | **internal Genesis Assistants API** | Gemini / Vertex AI |
-| Transport | plain HTTP (`/api/chat`) | AG-UI events via self-hosted CopilotKit runtime |
-| Best when | you must call models through Genesis | you want the full CopilotKit/AG-UI stack |
-| Renderers / contracts | **identical** | **identical** |
+| LLM | **internal Genesis Assistants API** | **internal Genesis** (unchanged) |
+| Transport | `POST /api/chat` → FastAPI | AG-UI events via self-hosted `@copilotkit/runtime` |
+| Frontend glue | `useGenesisChat` + `<AgentUIRenderer>` | `useCopilotAction("render_ui")` + same renderer |
+| Contracts / renderers | **identical** | **identical** |
 
-Both end at the same `<AgentUIRenderer>`. Pick the lane that matches your model access; the
-UI and the contracts never change.
+See [04-frontend-integration.md](04-frontend-integration.md) for the optional CopilotKit
+wiring. No Google key in either case.
 
 ## Production notes
 

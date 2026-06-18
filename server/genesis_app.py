@@ -84,7 +84,12 @@ def health() -> dict:
 def chat(req: ChatRequest) -> dict:
     client, session = _session(req.session_id)
     result = run_turn(client, session, req.message)
-    return {"text": result.text, "payloads": result.payloads, "artifacts": result.artifacts}
+    return {
+        "text": result.text,
+        "payloads": result.payloads,
+        "artifacts": result.artifacts,
+        "context_used": result.context_used,
+    }
 
 
 @app.get("/api/artifacts")

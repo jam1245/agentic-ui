@@ -26,7 +26,7 @@ So when the user then asks "why did March dip?", "summarize this for leadership"
 ## The fix: every render also produces an artifact
 
 ```
-question → agent → tool → data → AgentUIPayload ──► render (React/AG-UI/CopilotKit)
+question → agent → tool → data → AgentUIPayload ──► render (React)
                                        │
                                        └─normalize─► ArtifactContext ──► session artifact registry
                                                                               │
@@ -113,85 +113,62 @@ return {"rows": [...], "source": "EVMS MCP", "filters": {"program": "P-117", "mo
 
 This gives the artifact its `sourceTool`, `sourceSystem`, and `filtersApplied` for free.
 
-### Google ADK — create + store the artifact in `render_ui`
+### Genesis agent — create + store the artifact each turn
 
-[`agent/ui_tools.py`](../agent/ui_tools.py). `render_ui` receives `tool_context`, validates
-the payload, normalizes it into an `ArtifactContext`, and stores it in **session state**:
+[`agent/genesis_agent.py`](../agent/genesis_agent.py). When the agent renders, it normalizes
+the payload into an `ArtifactContext` and stores it in **session state**:
 
 ```python
-def render_ui(payload, original_user_question, summary_for_future_turns,
-              tool_context: ToolContext, source_tool=""):
-    validated = _adapter.validate_python(payload)
-    artifact = to_artifact_context(validated,
-        original_user_question=original_user_question,
-        source_tool=source_tool or validated.metadata.source,
-        summary_for_future_turns=summary_for_future_turns)
-    store_artifact(tool_context.state, artifact)   # ← ADK session state
-    return {"rendered": True, "artifactId": artifact.artifactId, "payload": ...}
+artifact = to_artifact_context(
+    payload,
+    original_user_question=user_question,
+    source_tool=source_tool,
+    summary_for_future_turns=summary,
+)
+payload.artifactId = artifact.artifactId
+store_artifact(session.state, artifact)        # ← per-conversation session state
 ```
 
-Two recall tools complete the loop:
-- `list_artifacts(tool_context)` → digests of everything shown (resolve "this"/"that").
-- `get_artifact_data(artifact_id, tool_context)` → full rows on demand (rehydration).
+The loop also handles recall directly:
+- prior artifact **digests** are injected into every prompt (resolve "this"/"that"),
+- a `{"action":"get_artifact","artifactId":...}` step rehydrates full rows on demand, and
+- the turn reports `context_used` so the UI can show a "🧠 used context" badge.
 
-ADK session state is the **backend source of truth** and survives across turns. The agent
-instruction ([`agent/agent.py`](../agent/agent.py)) teaches it to prefer the stored summary,
-call `get_artifact_data` for row-level detail, and only hit a fresh tool for genuinely new
-data.
+Session state is the **backend source of truth** and persists across turns (the Genesis
+thread keeps the conversation; the artifact registry keeps the data).
 
-### AG-UI — emit artifact events
+### Transport — `artifactId` ties render to context
 
-The `render_ui` tool call already travels as an AG-UI event (it carries the payload +
-`artifactId`). Treat the artifact lifecycle as events too: `artifact.created` on render,
-optionally `artifact.updated` when a follow-up refines it. Because the `artifactId` is in
-the rendering payload, the frontend can correlate the rendered component with its context
-without a second channel.
+The rendered payload carries its `artifactId`, so the frontend correlates the on-screen
+component with its stored context without a second channel. Over the HTTP transport the
+server simply returns `{ payloads, artifacts, context_used }`; over AG-UI/CopilotKit the
+same fields ride events and `useCopilotReadable` — the contract is unchanged.
 
-### CopilotKit — make artifacts readable + rehydratable
-
-[`src/copilotkit/useArtifactAwareness.tsx`](../src/copilotkit/useArtifactAwareness.tsx):
-
-```tsx
-useCopilotReadable({                         // compact digests → in the agent's context
-  description: "Artifacts already rendered this conversation…",
-  value: digests,                            // summaries only, never full data
-});
-
-useCopilotAction({                           // on-demand rehydration
-  name: "get_artifact_data",
-  parameters: [{ name: "artifactId", type: "string", required: true }],
-  handler: ({ artifactId }) => artifactRegistry.get(artifactId)?.fullData ?? ...,
-});
-```
-
-`useCopilotReadable` is the front-end mirror of ADK session state — it feeds the same
-digests into the agent. Use one or both depending on where your chat agent runs.
-
-### React — where artifact context lives
+### Frontend — where artifact context lives
 
 ```
-┌── backend session store (ADK state / DB)  ← source of truth; survives reload, multi-tab
-│        ▲ source-of-truth reads for server-side reasoning
+┌── backend session store (server/genesis_app.py; swap for a DB) ← source of truth
+│        ▲ the agent reasons from this across turns
 │        │
-└── client registry (Zustand/Redux/Context) ← drives UI + feeds CopilotKit readables
+└── client registry (src/store/artifactRegistry.ts)             ← drives the Context panel
 ```
 
 **Recommendation: both.** The backend store is authoritative (the agent reasons from it);
-the client store ([`src/store/artifactRegistry.ts`](../src/store/artifactRegistry.ts))
-mirrors it for the UI and CopilotKit. The reference uses a dependency-free
-`useSyncExternalStore` registry — swap in Zustand/Redux if you already have one. For a
-single-process demo the client store alone is enough; for production, persist server-side.
+the client store ([`src/store/artifactRegistry.ts`](../src/store/artifactRegistry.ts), a
+dependency-free `useSyncExternalStore` registry — swap in Zustand/Redux if you have one)
+mirrors it for the UI. For the single-process demo the in-memory backend store is enough;
+for production, persist server-side so context survives restarts / scales across pods.
 
 ## Recommended flow
 
 ```
-1. MCP returns structured data (rows + source + filters).
-2. ADK agent interprets the result.
+1. Data tool / MCP returns structured rows (+ source + filters).
+2. The Genesis agent interprets the result and picks a visualization.
 3. Agent emits a UI rendering payload (AgentUIPayload).
 4. Same payload is normalized into ArtifactContext (shared artifactId).
-5. ArtifactContext is stored in a session-level artifact registry (ADK state + client mirror).
-6. Main chat agent receives a COMPACT digest in future prompts (summary + schema + sample).
-7. Full artifact data is retrieved only when needed (get_artifact_data / dataRef re-query).
+5. ArtifactContext is stored in the session artifact registry.
+6. Future prompts get a COMPACT digest (summary + schema + sample) — never the full rows.
+7. Full data is rehydrated only when a follow-up needs it (get_artifact / dataRef re-query).
 ```
 
 ## Worked follow-up examples
@@ -251,5 +228,5 @@ You need **both** contracts:
 Build the first and you get charts. Build both and you get a conversation that keeps
 working *with* those charts.
 
-← back to the [README](../README.md) · related: [05 ADK](05-google-adk-tools.md),
-[04 CopilotKit/AG-UI](04-copilotkit-agui-integration.md)
+← back to the [README](../README.md) · related: [05 backend & data tools](05-backend-and-data-tools.md),
+[10 Genesis LLM](10-genesis-internal-llm.md)

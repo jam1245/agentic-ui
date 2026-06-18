@@ -68,6 +68,49 @@
 .agent-ui-fishbone-category { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .agent-ui-fishbone-bone ul { margin: 0; padding-left: 16px; font-size: 12px; }
 
+/* ---------------- landing page ---------------- */
+.landing { max-width: 1200px; margin: 0 auto; padding: 24px; font-family: system-ui, sans-serif; }
+.landing-head h1 { font-size: 22px; margin: 0 0 4px; }
+.landing-head p { color: var(--agui-muted); margin: 0 0 16px; font-size: 14px; }
+.landing-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .landing-grid { grid-template-columns: 1fr; } }
+
+/* chat pane */
+.chat-pane { display: flex; flex-direction: column; border: 1px solid var(--agui-border); border-radius: 12px; overflow: hidden; min-height: 560px; }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; border-bottom: 1px solid var(--agui-border); background: #f8fafc; }
+.chip { border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+.chip:hover:not(:disabled) { background: #eef2ff; border-color: #93c5fd; }
+.chip:disabled { opacity: 0.5; cursor: default; }
+.chat-log { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: 70vh; }
+.chat-empty { color: var(--agui-muted); font-size: 13px; text-align: center; padding: 24px 0; }
+.chat-thinking { color: var(--agui-muted); font-size: 13px; font-style: italic; }
+.bubble { display: flex; flex-direction: column; gap: 6px; }
+.bubble--user { align-items: flex-end; }
+.bubble-role { font-size: 11px; color: var(--agui-muted); }
+.bubble--user .bubble-text { background: #2563eb; color: #fff; border-radius: 12px 12px 2px 12px; padding: 8px 12px; font-size: 14px; max-width: 80%; }
+.bubble--assistant .bubble-text { background: #f1f5f9; border-radius: 12px 12px 12px 2px; padding: 8px 12px; font-size: 14px; }
+.ctx-badge { align-self: flex-start; background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; border-radius: 6px; font-size: 11px; padding: 2px 8px; }
+.chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--agui-border); }
+.chat-input input { flex: 1; padding: 8px 12px; border: 1px solid var(--agui-border); border-radius: 8px; font-size: 14px; }
+.chat-input button { padding: 8px 16px; border: none; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
+.chat-input button:disabled { opacity: 0.5; }
+
+/* under-the-hood pane */
+.hood-pane { border: 1px solid var(--agui-border); border-radius: 12px; overflow: hidden; position: sticky; top: 16px; }
+.hood-tabs { display: flex; border-bottom: 1px solid var(--agui-border); background: #f8fafc; }
+.hood-tabs button { flex: 1; border: none; background: transparent; padding: 10px; font-size: 13px; cursor: pointer; color: var(--agui-muted); }
+.hood-tabs button.on { color: #0f172a; font-weight: 600; box-shadow: inset 0 -2px 0 #2563eb; }
+.hood-body { padding: 14px; max-height: 75vh; overflow-y: auto; }
+.hood-hint { font-size: 12px; color: var(--agui-muted); margin: 0 0 12px; line-height: 1.5; }
+.hood-code { font-size: 11px; background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; }
+.ctx-card { border: 1px solid var(--agui-border); border-left: 3px solid #06b6d4; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.ctx-title { font-weight: 600; font-size: 13px; }
+.ctx-summary { font-size: 12px; color: #334155; margin: 2px 0; }
+.ctx-meta { font-size: 11px; color: var(--agui-muted); }
+.gallery-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.gallery-tabs button { border: 1px solid var(--agui-border); background: #fff; border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
+.gallery-tabs button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+
 /* interactive drill buttons */
 .agent-ui-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .agent-ui-drill-btn { border: 1px solid var(--agui-border); background: #f8fafc; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }

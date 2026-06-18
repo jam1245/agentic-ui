@@ -10,13 +10,14 @@ The thing producing payloads is an **LLM**. Its output is not guaranteed to matc
 types, even with a JSON Schema attached. So validate on **both** sides:
 
 ```
-agent → render_ui (pydantic validate) → AG-UI → CopilotKit → validatePayload (zod) → render
-            │                                                      │
-            └─ raises → agent self-corrects in-turn               └─ fails → table fallback
+Genesis agent → pydantic validate → POST /api/chat → validatePayload (zod) → render
+                     │                                       │
+                     └─ raises → loop / fall back            └─ fails → table fallback
 ```
 
-- **Server-side (pydantic, [`ui_tools.py`](../agent/ui_tools.py)):** catches most errors
-  early and lets the agent *fix and retry* within the same run — the user never sees it.
+- **Server-side (pydantic, [`genesis_agent.py`](../agent/genesis_agent.py)):** assembles
+  the payload from real tool rows + the model's render spec and validates before returning;
+  a bad component degrades to a table rather than reaching the browser broken.
 - **Client-side (zod, [`schema.ts`](../src/contract/schema.ts)):** the backstop. Anything
   that slips through renders as a **table** with the original data preserved, plus a
   visible "fallback" badge and the validation error in the footer.
@@ -44,9 +45,8 @@ The team's own list, answered:
 | What schema does each component expect? | [`contract/types.ts`](../src/contract/types.ts) + zod variants in [`schema.ts`](../src/contract/schema.ts). One file, mirrored in pydantic. |
 | How is data validated? | zod (client) + pydantic (server), from one exported JSON Schema. |
 | How do errors fall back? | Always to `table`, data preserved, error surfaced in footer. |
-| Direct payload vs registered UI tool? | Registered UI tool (`render_ui`) — Pattern A. Keeps the contract enforced at the boundary and lets the UI advertise its menu. |
-| How do AG-UI/CopilotKit carry payloads? | The `render_ui` tool call becomes an AG-UI event; CopilotKit's `useCopilotAction("render_ui").render` receives the args and renders. See [04](04-copilotkit-agui-integration.md). |
-| How is ADK/MCP state preserved? | Data tools return source-tagged rows; `metadata.source`/`filtersApplied` travel in the payload so provenance survives to the UI. Durable selections go through CopilotKit shared state, not render payloads. |
+| How are payloads delivered? | Over `POST /api/chat` as JSON ([04](04-frontend-integration.md)); the same payload can ride AG-UI/CopilotKit unchanged. |
+| How is data-source state preserved? | Data tools return source-tagged rows; `metadata.source`/`filtersApplied` travel in the payload so provenance survives to the UI; the artifact registry keeps full rows for rehydration ([09](09-artifact-aware-context.md)). |
 
 ## Defensive practices
 

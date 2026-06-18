@@ -93,6 +93,9 @@ class TurnResult:
     text: str
     payloads: list[dict]  # validated AgentUIPayloads (with artifactId) for the UI
     artifacts: list[dict]  # compact digests, for inspection / readables
+    # Artifacts this turn pulled from prior context (e.g. "why did March dip?" rehydrated
+    # the CPI chart). Lets the UI prove data is being absorbed into the conversation.
+    context_used: list[dict] = field(default_factory=list)
 
 
 def _extract_json(text: str) -> dict:
@@ -153,6 +156,7 @@ def _payload_from_fetch(action: dict) -> tuple[AgentUIPayload, str, str]:
 def run_turn(client, session: GenesisSession, user_question: str, max_iters: int = 4) -> TurnResult:
     """Drive one user turn through Genesis, returning text + any payloads to render."""
     payloads: list[dict] = []
+    context_used: list[dict] = []
     injected = ""
 
     for _ in range(max_iters):
@@ -161,7 +165,7 @@ def run_turn(client, session: GenesisSession, user_question: str, max_iters: int
             action = _extract_json(reply)
         except json.JSONDecodeError:
             # Not JSON -> treat as a plain text answer.
-            return TurnResult(text=reply.strip(), payloads=payloads, artifacts=_digests(session))
+            return TurnResult(reply.strip(), payloads, _digests(session), context_used)
 
         kind = action.get("action")
 
@@ -176,7 +180,7 @@ def run_turn(client, session: GenesisSession, user_question: str, max_iters: int
             payload.artifactId = artifact.artifactId
             store_artifact(session.state, artifact)
             payloads.append(payload.model_dump(exclude_none=True))
-            return TurnResult(text=summary, payloads=payloads, artifacts=_digests(session))
+            return TurnResult(summary, payloads, _digests(session), context_used)
 
         if kind == "render":
             payload = _adapter.validate_python(action["payload"])
@@ -189,21 +193,24 @@ def run_turn(client, session: GenesisSession, user_question: str, max_iters: int
             payload.artifactId = artifact.artifactId
             store_artifact(session.state, artifact)
             payloads.append(payload.model_dump(exclude_none=True))
-            return TurnResult(text=action.get("summary", ""), payloads=payloads, artifacts=_digests(session))
+            return TurnResult(action.get("summary", ""), payloads, _digests(session), context_used)
 
         if kind == "get_artifact":
             art = _resolve_artifact(session, action.get("artifactId", ""))
             rows = art.fullData if art else []
+            if art:
+                # Record that this turn drew on prior context (for the UI's "absorbed" badge).
+                context_used.append({"artifactId": art.artifactId, "title": art.title})
             injected = f"\nROWS FOR ARTIFACT {action.get('artifactId')}:\n{json.dumps(rows)[:4000]}"
             continue  # loop again with the rehydrated rows in context
 
         if kind == "reply":
-            return TurnResult(text=action.get("text", ""), payloads=payloads, artifacts=_digests(session))
+            return TurnResult(action.get("text", ""), payloads, _digests(session), context_used)
 
         # Unknown action -> stop defensively.
-        return TurnResult(text=reply.strip(), payloads=payloads, artifacts=_digests(session))
+        return TurnResult(reply.strip(), payloads, _digests(session), context_used)
 
-    return TurnResult(text="(stopped: too many steps)", payloads=payloads, artifacts=_digests(session))
+    return TurnResult("(stopped: too many steps)", payloads, _digests(session), context_used)
 
 
 def _resolve_artifact(session: GenesisSession, artifact_id: str) -> ArtifactContext | None:

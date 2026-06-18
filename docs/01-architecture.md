@@ -33,26 +33,23 @@ User asks a question
   → Tool returns structured data (rows)
   → Agent selects a visualization pattern   ← the new step
   → Agent emits a structured UI payload      ← the contract
-  → React / CopilotKit renders the component
+  → React renders the component
 ```
 
 **The key rule:** the agent never generates the chart itself (no SVG, no React, no image).
-It calls a **UI-rendering tool** (`render_ui`) or emits a **structured UI payload** that
-React already knows how to render.
+It emits a **structured UI payload** that React already knows how to render.
 
-## Why each piece of the stack is here
+## Why each piece is here
 
-- **Google ADK** — orchestrates the agent and its tools. ADK tools have structured,
-  typed inputs and outputs, which is exactly what we need: one set of tools for *data*,
-  one tool for *UI intent*. See [`05-google-adk-tools.md`](05-google-adk-tools.md).
-- **MCP** — the data-access layer behind the data tools. Unchanged from today; this is the
-  part that already works.
-- **AG-UI** — standardizes agent-to-frontend communication as an **event protocol**. The
-  `render_ui` payload and any user interaction travel over AG-UI events, so the transport
-  is the same whether the UI is display-only or interactive.
-- **CopilotKit** — the React integration that turns AG-UI events into rendered components.
-  Its **generative UI** feature lets you register a React renderer for a tool/action; when
-  the agent calls it, CopilotKit renders your component with the args as props.
+- **Internal Genesis LLM** — the reasoning engine. It interprets intent, picks the data
+  tool, and chooses the visualization. The only LLM backend; no Google key.
+  See [`05-backend-and-data-tools.md`](05-backend-and-data-tools.md).
+- **Data tools / MCP** — the data-access layer behind the agent. Plain functions returning
+  rows + source/filters; this is the part that already works today.
+- **Transport (HTTP/JSON)** — the agent's payloads reach the browser over a simple
+  `POST /api/chat`. The contract is transport-agnostic, so AG-UI events + a CopilotKit
+  runtime can carry the *same* payload if you adopt that stack later
+  ([`04-frontend-integration.md`](04-frontend-integration.md)).
 - **React** — owns all rendering: a registry maps each component kind to a renderer.
 
 ## Responsibility split (the answer to "how much belongs where")
@@ -77,19 +74,12 @@ chooses from that menu and supplies data + mapping + meaning. This keeps the UI 
 (add a renderer once, every agent can use it) while letting the agent drive the
 experience dynamically (it decides which one and with what data).
 
-## Two valid transport choices
+## One payload, any transport
 
-Both keep the *contract* identical; they differ only in how the payload is delivered:
-
-1. **Single `render_ui` action** (recommended to start). One ADK tool / one CopilotKit
-   action whose argument *is* the `AgentUIPayload`. Adding a new chart type requires **no**
-   new tool/action — just a renderer + a schema entry. Fewer moving parts, one thing for
-   the LLM to learn.
-2. **One action per component** (`line_chart`, `risk_matrix`, …). More explicit
-   per-component schemas and discoverability, but N tools to maintain and N signatures for
-   the model to learn. Good once your component catalog is stable.
-
-This guide implements **option 1** and documents option 2 in
-[`04-copilotkit-agui-integration.md`](04-copilotkit-agui-integration.md).
+The contract is a single structured `AgentUIPayload` whose `component` field selects the
+view. Adding a new chart type requires **no** transport change — just a renderer + a schema
+entry. This repo delivers the payload over plain HTTP; the identical payload can ride AG-UI
+events into a CopilotKit generative-UI action if you adopt that stack
+([`04-frontend-integration.md`](04-frontend-integration.md)).
 
 Next: [the payload contract →](02-payload-contract.md)
