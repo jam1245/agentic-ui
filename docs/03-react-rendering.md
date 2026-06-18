@@ -101,4 +101,4 @@ with that selection in context. (If you later adopt CopilotKit, its
 `renderAndWaitForResponse` does the same round trip over AG-UI events; see
 [04-frontend-integration.md](04-frontend-integration.md).)
 
-Next: [the backend & data tools →](05-backend-and-data-tools.md)
+Next: [frontend integration →](04-frontend-integration.md)

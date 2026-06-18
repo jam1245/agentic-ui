@@ -95,6 +95,33 @@ every component from static payloads. `npm test` runs the contract + artifact te
 
 ---
 
+## Learn it step by step
+
+A guided path for a developer new to this. **Do step 0 first** — seeing it run makes the
+rest concrete — then read the docs in order (each ends with a "Next →" link, so you can
+just keep clicking through `docs/`).
+
+| Step | Read / do | What you'll learn |
+| --- | --- | --- |
+| **0. See it work** | [TESTING.md](TESTING.md) → `npm run dev:genesis` | the whole loop in the browser; click the chips, watch the Context panel |
+| **1. The big idea** | [docs/01-architecture.md](docs/01-architecture.md) | why the agent emits a *payload*, not a chart; who owns what |
+| **2. Contract 1** | [docs/02-payload-contract.md](docs/02-payload-contract.md) | the `AgentUIPayload` schema, field by field, and why |
+| **3. Rendering** | [docs/03-react-rendering.md](docs/03-react-rendering.md) | the registry + one generic `<AgentUIRenderer>` |
+| **4. Frontend wiring** | [docs/04-frontend-integration.md](docs/04-frontend-integration.md) | how a payload reaches React (and the optional CopilotKit/AG-UI path) |
+| **5. Backend** | [docs/05-backend-and-data-tools.md](docs/05-backend-and-data-tools.md) | data tools / MCP + the hybrid agent loop |
+| **6. Examples** | [docs/06-examples.md](docs/06-examples.md) | the same contract across 8 program-management scenarios |
+| **7. Roadmap** | [docs/07-implementation-roadmap.md](docs/07-implementation-roadmap.md) | crawl/walk/run rollout + anti-patterns |
+| **8. Trust & fallbacks** | [docs/08-validation-and-fallbacks.md](docs/08-validation-and-fallbacks.md) | validate both sides; degrade to a table, never crash |
+| **9. Contract 2** | [docs/09-artifact-aware-context.md](docs/09-artifact-aware-context.md) | how charts stay in chat context for follow-ups |
+| **10. Run on Genesis** | [docs/10-genesis-internal-llm.md](docs/10-genesis-internal-llm.md) | the internal LLM end to end + a per-prompt demo walkthrough |
+| **11. Extend** | [docs/11-add-a-visualization.md](docs/11-add-a-visualization.md) | add your own chart type — a copy-pasteable, 6-step worked example |
+
+New to the codebase and want the fastest "aha"? Read **1 → 2 → 3**, then open the
+**Payload** and **Context** tabs while you click chips in the running app. Docs 1 and 10
+include rendered diagrams (architecture flow, a turn sequence) to anchor the mental model.
+
+---
+
 ## Repository layout
 
 ```

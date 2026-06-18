@@ -106,6 +106,32 @@ Browser (App.tsx, "/") ──POST /api/chat──► server/genesis_app.py
                     { text, payloads, artifacts, context_used } → <AgentUIRenderer>
 ```
 
+A chart turn then a follow-up, as a sequence — note the follow-up never re-queries the
+tool; it reuses the stored artifact:
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as Genesis backend
+    participant T as Data tool
+    participant L as Genesis LLM
+    participant R as Artifact registry
+
+    U->>S: "Show CPI trend"
+    S->>T: get_cpi_trend()
+    T-->>S: rows + source
+    S->>L: write 1-line takeaway (prose)
+    L-->>S: "CPI recovered… dip in March"
+    S->>R: store ArtifactContext
+    S-->>U: line_chart payload + summary
+
+    U->>S: "Why did March dip?"
+    S->>R: rehydrate CPI artifact rows
+    S->>L: answer from these rows (prose)
+    L-->>S: "March is the low point at 0.90…"
+    S-->>U: text + 🧠 context_used badge
+```
+
 Files:
 - [`agent/genesis_client.py`](../agent/genesis_client.py) — `POST /completions` client
   (stateless; conversation context is rebuilt each turn) + `MockGenesisClient` for offline.
@@ -165,4 +191,5 @@ wiring. No Google key in either case.
 - Keep `LLM_API_KEY` server-side only (it lives in the Python backend, never the browser).
 - The mock client is for demos/CI; it is never used when a key is configured.
 
-← back to the [README](../README.md) · see also [TESTING.md](../TESTING.md)
+Next: [extend — add a new visualization →](11-add-a-visualization.md) · or
+[back to the README](../README.md)

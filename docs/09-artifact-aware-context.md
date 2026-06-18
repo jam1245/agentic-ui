@@ -228,5 +228,4 @@ You need **both** contracts:
 Build the first and you get charts. Build both and you get a conversation that keeps
 working *with* those charts.
 
-← back to the [README](../README.md) · related: [05 backend & data tools](05-backend-and-data-tools.md),
-[10 Genesis LLM](10-genesis-internal-llm.md)
+Next: [run it all on the internal Genesis LLM →](10-genesis-internal-llm.md)

@@ -105,5 +105,6 @@ Recommended CI check: export the zod JSON Schema and diff it against
 }
 ```
 
-More worked examples: [06-examples.md](06-examples.md). How React consumes this:
-[03-react-rendering.md](03-react-rendering.md).
+More worked examples: [06-examples.md](06-examples.md).
+
+Next: [the React rendering pattern →](03-react-rendering.md)

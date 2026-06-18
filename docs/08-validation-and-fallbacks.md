@@ -72,4 +72,4 @@ The team's own list, answered:
 At that point the team's recurring work is: *add a renderer, add a schema variant, teach
 the agent one rule.* The agent→UI path itself never needs to change again.
 
-← back to the [README](../README.md)
+Next: [artifact-aware context (Contract 2) →](09-artifact-aware-context.md)

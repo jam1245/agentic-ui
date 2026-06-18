@@ -39,6 +39,22 @@ User asks a question
 **The key rule:** the agent never generates the chart itself (no SVG, no React, no image).
 It emits a **structured UI payload** that React already knows how to render.
 
+```mermaid
+flowchart LR
+    U([User question]) --> A[Genesis agent]
+    A -->|route_chart| D[Data tool / MCP]
+    D -->|rows| A
+    A -->|"AgentUIPayload<br/>(Contract 1)"| V[validate zod]
+    V -->|ok| R["&lt;AgentUIRenderer&gt;<br/>registry lookup"]
+    V -->|bad| T[fallback: table]
+    R --> C([chart / KPI / matrix / …])
+    A -->|"ArtifactContext<br/>(Contract 2)"| S[(session<br/>artifact registry)]
+    S -.->|digest in next prompt| A
+```
+
+The two arrows out of the agent are the two contracts: one drives the **render**, one keeps
+the conversation **data-aware**.
+
 ## Why each piece is here
 
 - **Internal Genesis LLM** — the reasoning engine. It interprets intent, picks the data
