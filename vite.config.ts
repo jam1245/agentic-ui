@@ -9,15 +9,21 @@ export default defineConfig({
       input: {
         // Tier 1 — key-free demo
         main: resolve(__dirname, "index.html"),
-        // Tier 4 — live agent chat
+        // Tier 4 — live agent chat (ADK + CopilotKit)
         chat: resolve(__dirname, "chat.html"),
+        // Genesis — internal LLM chat
+        genesis: resolve(__dirname, "genesis.html"),
       },
     },
   },
   server: {
-    // Forward the chat's /api/copilotkit calls to the self-hosted runtime (Tier 4).
     proxy: {
+      // Tier 4 — CopilotKit self-hosted runtime
       "/api/copilotkit": process.env.RUNTIME_URL ?? "http://localhost:4000",
+      // Genesis backend (server/genesis_app.py)
+      "/api/chat": process.env.GENESIS_URL ?? "http://localhost:8800",
+      "/api/artifacts": process.env.GENESIS_URL ?? "http://localhost:8800",
+      "/api/health": process.env.GENESIS_URL ?? "http://localhost:8800",
     },
   },
   test: {

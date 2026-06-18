@@ -1,11 +1,59 @@
 # Testing this locally
 
-Three tiers, easiest first. **Tier 1 needs no API key and no agent** — start there to see
-both contracts working in your browser in under a minute.
+Tiers, easiest first. **Everything below runs with NO API key** thanks to an offline mock
+of the internal Genesis LLM — then you flip a key to go live.
+
+> **Windows / macOS / Linux:** runs the same on all three. Node, Python, and every `npm`
+> script here are cross-platform (`concurrently` handles the multi-process ones on Windows).
+> Two small differences from the Mac examples below:
+> - **Use `python` (or `py`) instead of `python3`** if `python3` isn't on your PATH (common
+>   on Windows).
+> - **Don't `export` keys — put them in a `.env` file.** Copy `.env.example` to `.env` and
+>   fill in `LLM_API_KEY` / `PM_ASSISTANT_ID`. Both the Python backend (`python-dotenv`) and
+>   Vite load `.env` automatically, so you never need `export` (mac/Linux) or `set` /
+>   `$env:` (Windows). On Windows, `copy .env.example .env` (cmd) or
+>   `Copy-Item .env.example .env` (PowerShell) instead of `cp`.
+>
+> Prereqs everywhere: Node 18+ and Python 3.10+.
+
+| Want to… | Run | Needs |
+| --- | --- | --- |
+| See all components render | `npm run dev` → `/` | nothing |
+| **See the internal-LLM chat (Genesis)** | `npm run dev:genesis` → `/genesis.html` | nothing (mock) → key to go live |
+| Run the Genesis loop in a terminal | `python3 scripts/genesis_demo.py --mock` | nothing |
+| Run the contract tests | `npm test` | nothing |
+| Full CopilotKit + ADK loop | `npm run dev:full` → `/chat.html` | Gemini key |
 
 ---
 
-## Tier 1 — The visual demo (no keys, no agent) ✅ start here
+## Tier 0 — The Genesis chat (your internal LLM) ✅ this is "the goal", working
+
+The headline path: your internal **Genesis** assistant driving real charts and answering
+follow-ups. Runs offline first (mock), then live with a key. See
+[docs/10-genesis-internal-llm.md](docs/10-genesis-internal-llm.md).
+
+```bash
+# 1. Offline proof in a terminal (no key) — full conversation, validated payloads:
+python3 -m pip install -r agent/requirements.txt
+python3 scripts/genesis_demo.py --mock
+
+# 2. In the browser (no key — mock backend):
+npm install
+npm run dev:genesis        # Genesis backend + Vite
+# open http://localhost:5173/genesis.html  →  click "Show CPI trend…", then "Why did March dip?"
+
+# 3. Go live with the real Genesis LLM:
+#    copy .env.example → .env and set LLM_API_KEY and PM_ASSISTANT_ID (no export needed)
+#    macOS/Linux: cp .env.example .env   |   Windows: copy .env.example .env
+npm run dev:genesis        # /api/health now reports mode:"genesis"
+```
+
+Same contracts, same `<AgentUIRenderer>` as every other tier — only the LLM backend
+changes. The LLM key stays server-side (in the Python backend), never in the browser.
+
+---
+
+## Tier 1 — The visual demo (no keys, no agent)
 
 Proves **Contract 1** (rendering) and **Contract 2** (artifact context) with the real
 React components and the real contract code. No CopilotKit, no Google ADK, no LLM.
@@ -36,16 +84,22 @@ npm test            # 7 tests: payload validation, table fallback, artifact dige
 npm run typecheck   # whole React + scripts tree typechecks
 npm run export:schema   # emits dist/agent-ui-payload.schema.json (the agent's tool schema)
 
-# Python / ADK contract  (just needs pydantic, not the full ADK)
+# Python contract  (just needs pydantic, not the full ADK)
 python3 -m pip install pydantic
 python3 scripts/check_python_contract.py   # round-trips render → artifact → digest → rehydrate
+
+# Genesis agent loop, offline (canned LLM responses)
+python3 scripts/genesis_demo.py --mock     # full conversation incl. "why did March dip?"
 ```
 
 These are the tests to wire into CI. They don't need a network or an LLM.
 
 ---
 
-## Tier 3 — The live agent (needs a Gemini API key)
+## Tier 3 — The live ADK agent (alternative backend; needs a Gemini API key)
+
+> Prefer the **Genesis** lane (Tier 0) if you call models through the internal API. This
+> tier is the Gemini/Vertex alternative.
 
 Runs the actual Google ADK agent so you can type questions and watch it choose components
 and store artifacts.
@@ -123,10 +177,11 @@ Run pieces individually if you prefer: `npm run dev:agent`, `npm run dev:runtime
 
 | You want to verify… | Run |
 | --- | --- |
+| **The internal Genesis LLM driving charts, end to end** | **Tier 0 (`npm run dev:genesis`)** |
+| Genesis follow-ups ("why did March dip?") work | Tier 0 (`scripts/genesis_demo.py --mock` or browser) |
 | Charts/tables/KPIs render from a payload | Tier 1 (`npm run dev`) |
 | Bad payloads fall back to a table | Tier 2 (`npm test`) |
 | The chat agent keeps a prompt-safe artifact digest | Tier 1 panel + Tier 2 |
-| Full data is rehydrated on demand, not prompted | Tier 2 (artifact tests + Python script) |
-| The agent picks the right component for a question | Tier 3 (`adk web`) |
-| Follow-ups ("why did March dip?") work | Tier 3 |
-| End-to-end in the browser | Tier 4 (your adapter wiring) |
+| Full data is rehydrated on demand, not prompted | Tier 2 (artifact tests + Python scripts) |
+| The agent picks the right component for a question | Tier 0 (Genesis) or Tier 3 (ADK/Gemini) |
+| Full CopilotKit/AG-UI browser loop | Tier 4 (`npm run dev:full`) |

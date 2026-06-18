@@ -14,7 +14,9 @@
     "dev:agent": "uvicorn agent.serve:app --reload --port 8000",
     "dev:runtime": "tsx server/copilotkit-runtime.ts",
     "dev:chat": "vite",
-    "dev:full": "concurrently -n agent,runtime,web -c blue,magenta,green \"npm:dev:agent\" \"npm:dev:runtime\" \"npm:dev:chat\""
+    "dev:full": "concurrently -n agent,runtime,web -c blue,magenta,green \"npm:dev:agent\" \"npm:dev:runtime\" \"npm:dev:chat\"",
+    "dev:genesis-server": "uvicorn server.genesis_app:app --reload --port 8800",
+    "dev:genesis": "concurrently -n genesis,web -c cyan,green \"npm:dev:genesis-server\" \"vite\""
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.57",

@@ -83,6 +83,7 @@ docs/                      ← the implementation guide (start here)
   07-implementation-roadmap.md   crawl/walk/run rollout
   08-validation-and-fallbacks.md  trust boundaries & graceful degradation
   09-artifact-aware-context.md   CONTRACT 2: charts as conversational artifacts
+  10-genesis-internal-llm.md   driving the demos with the internal Genesis LLM
 
 src/                       ← React reference implementation
   contract/                types.ts + schema.ts (CONTRACT 1) · artifact.ts (CONTRACT 2)
@@ -93,48 +94,70 @@ src/                       ← React reference implementation
   examples/payloads.ts    canonical example payloads (used by demo + tests)
   App.tsx                 standalone demo of all components + artifact digest panel
 
-server/                    ← self-hosted CopilotKit runtime (Tier 4, no Copilot Cloud)
-  copilotkit-runtime.ts   Express + @copilotkit/runtime, HttpAgent → ADK over AG-UI
+src/genesis/             ← internal-LLM chat (Genesis) — plain-fetch chat + AgentUIRenderer
 
-agent/                     ← Google ADK reference implementation (Python)
+server/                    ← backends
+  genesis_app.py          FastAPI: drives the demos with the internal Genesis LLM
+  copilotkit-runtime.ts   self-hosted CopilotKit runtime (Tier 4), HttpAgent → ADK over AG-UI
+
+agent/                     ← Python: two LLM backends, one set of contracts
+  genesis_client.py       internal Genesis Assistants-API client (+ offline mock)
+  genesis_agent.py        agent loop over Genesis → validated payloads + artifacts
   data_tools.py           MCP/data-layer tools (return rows + source/filters)
   ui_tools.py             render_ui (renders + stores artifact) · list/get_artifact_data
   payloads.py             pydantic mirror of CONTRACT 1
   artifacts.py            pydantic mirror of CONTRACT 2 + session-state registry
-  agent.py                the agent + instruction (viz choice + follow-up recall)
-  serve.py                exposes the agent over AG-UI (ag_ui_adk) for Tier 4
+  agent.py / serve.py     Google ADK agent + its AG-UI endpoint (alternative backend)
+
+scripts/genesis_demo.py    ← zero-to-working CLI proof (runs offline with --mock)
 ```
 
-**Try it locally:** [TESTING.md](TESTING.md) — Tier 1 (browser demo, no keys) →
-Tier 4 (`npm run dev:full`: live ADK agent rendering charts in chat via the self-hosted
-runtime).
+**Try it locally — start here:** [TESTING.md](TESTING.md). The fastest "this is the goal,
+working" path uses your internal **Genesis** LLM and needs **no key to start** (offline
+mock), then flips live with a key.
 
 ---
 
 ## Quick start
 
-> **Just want to try it?** See [TESTING.md](TESTING.md) — Tier 1 runs in the browser with
-> **no API key and no agent** (`npm install && npm run dev`).
-
-**React demo (no agent needed — proves the contract + renderers):**
+### The goal, working — internal Genesis LLM (no key to start)
 
 ```bash
+python3 -m pip install -r agent/requirements.txt
 npm install
-npm run dev          # open the demo: tabs for every example payload
-npm test             # contract validation tests (incl. fallback behavior)
-npm run export:schema  # emit JSON Schema for the agent's tool definition
+
+# 1. Prove the whole pipeline in a terminal, offline:
+python3 scripts/genesis_demo.py --mock
+
+# 2. In the browser (offline mock backend):
+npm run dev:genesis        # → http://localhost:5173/genesis.html
+#    try: "Show CPI trend for the last six months"  then  "Why did March dip?"
+
+# 3. Go live with the real Genesis LLM:
+#    copy .env.example → .env, set LLM_API_KEY + PM_ASSISTANT_ID (loaded automatically)
+npm run dev:genesis
 ```
 
-**Google ADK agent:**
+Runs the same on Windows/macOS/Linux (Node + Python; keys via `.env`, no `export`/`set`
+needed). Same contracts and the same `<AgentUIRenderer>` drive every backend — see
+[docs/10-genesis-internal-llm.md](docs/10-genesis-internal-llm.md).
+
+### Contract-only demo (no LLM at all)
 
 ```bash
-cd agent
-pip install -r requirements.txt
-adk web              # or: adk run .   — try "Show CPI trend for the last 6 months"
+npm run dev          # tabs for every example payload + the artifact digest panel
+npm test             # contract validation + artifact tests
 ```
 
-See [`docs/04-copilotkit-agui-integration.md`](docs/04-copilotkit-agui-integration.md)
-to connect the two over AG-UI + CopilotKit.
+### Alternative backend — Google ADK + self-hosted CopilotKit
+
+```bash
+pip install -r agent/requirements.txt
+adk web                       # Gemini/Vertex; or wire the full browser loop:
+npm run dev:full              # ADK → CopilotKit runtime → React (/chat.html)
+```
+
+See [`docs/04-copilotkit-agui-integration.md`](docs/04-copilotkit-agui-integration.md).
 
 ---
 

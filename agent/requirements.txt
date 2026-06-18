@@ -1,8 +1,11 @@
-google-adk>=0.3.0
+# Genesis lane (the demos' default LLM backend) — cross-platform (Windows/macOS/Linux)
+requests>=2.31
+python-dotenv>=1.0
 pydantic>=2.7
-
-# Tier 4 — expose the ADK agent over the AG-UI protocol for the self-hosted CopilotKit
-# runtime (server/copilotkit-runtime.ts). No Copilot Cloud required.
-ag-ui-adk>=0.1.0
 fastapi>=0.110
 uvicorn>=0.29
+
+# Google ADK path (alternative backend). Optional — only needed for `adk web` / Tier 4.
+google-adk>=0.3.0
+# Tier 4 — expose the ADK agent over AG-UI for the self-hosted CopilotKit runtime.
+ag-ui-adk>=0.1.0
