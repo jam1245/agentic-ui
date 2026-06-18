@@ -13,7 +13,7 @@ import { validatePayload } from "../contract";
 import { getRenderer } from "./registry";
 
 interface Props {
-  /** Unvalidated payload straight from the agent / CopilotKit action args. */
+  /** Unvalidated payload straight from the agent (the /api/chat response). */
   raw: unknown;
   /** Skip validation if the caller already validated (e.g. server-side). */
   prevalidated?: AgentUIPayload;

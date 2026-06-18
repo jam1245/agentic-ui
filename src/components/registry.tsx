@@ -34,7 +34,7 @@ export const REGISTRY: Record<ComponentKind, Renderer> = {
   fishbone: FishboneView,
 };
 
-/** The list the front end advertises to the agent (see useAgentUI / ADK guide). */
+/** The list of components the agent may choose from (see docs/04, docs/05). */
 export const SUPPORTED_COMPONENTS = Object.keys(REGISTRY) as ComponentKind[];
 
 export function getRenderer(payload: AgentUIPayload): Renderer {

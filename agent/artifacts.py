@@ -1,4 +1,4 @@
-"""Artifact-to-agent context contract (Python/ADK side).
+"""Artifact-to-agent context contract (Python side).
 
 Mirror of src/contract/artifact.ts. Where `payloads.py` describes how to *render*,
 this describes what a rendered artifact *means* so the main chat agent can reason about
@@ -7,12 +7,12 @@ it in later turns.
 Storage strategy (the key decision — see docs/09):
   * The compact DIGEST (summary + schema + filters + sample) is what goes into the model's
     context each turn — cheap and prompt-safe.
-  * The FULL rows live in ADK session state, fetched only on demand via get_artifact_data.
+  * The FULL rows live in the session store, fetched only on demand.
   * For large enterprise datasets, store a `data_ref` (query hash / cache key / URI) and
-    re-query the MCP tool to rehydrate instead of persisting megabytes in session state.
+    re-query the source/MCP tool to rehydrate instead of persisting megabytes.
 
-The registry here operates on a plain dict (ADK `tool_context.state`), so it's testable
-without a running ADK runtime.
+The registry operates on a plain dict (the per-conversation session store — see
+`GenesisSession.state` in genesis_agent.py), so it's testable without any agent runtime.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from .payloads import AgentUIPayload
 
-# Key under which the artifact registry lives in ADK session state.
+# Key under which the artifact registry lives in the session store.
 ARTIFACTS_STATE_KEY = "artifacts"
 SAMPLE_SIZE = 5
 
@@ -109,8 +109,8 @@ def to_digest(a: ArtifactContext) -> ArtifactDigest:
 
 
 # ----------------------------------------------------------------------------------
-# Session-state registry. `state` is ADK's tool_context.state (a dict-like). We persist
-# artifacts as plain dicts so they survive serialization across turns.
+# Session-state registry. `state` is the per-conversation session dict (GenesisSession.
+# state). We persist artifacts as plain dicts so they survive serialization across turns.
 # ----------------------------------------------------------------------------------
 
 def store_artifact(state: dict, artifact: ArtifactContext) -> None:

@@ -1,4 +1,4 @@
-"""DATA-layer ADK tools — the MCP/enterprise-system access layer.
+"""Data-layer tools — the MCP/enterprise-system access layer.
 
 These tools do ONE job: retrieve / compute structured data. They return plain dicts
 (rows + light metadata). They know nothing about charts. This is the boundary the team
@@ -8,9 +8,9 @@ In production these wrap real MCP servers (EVMS, Risk Register, IMS). Here they 
 representative program-management data so the example is runnable end to end.
 
 The separation is the whole point:
-    DATA tools  -> what the numbers ARE        (this file)
-    UI  tool    -> how the numbers are SHOWN   (ui_tools.py)
-    agent       -> the reasoning bridge        (agent.py)
+    DATA tools  -> what the numbers ARE                 (this file)
+    agent loop  -> picks the chart + answers questions  (genesis_agent.py)
+    contracts   -> payload + artifact                   (payloads.py / artifacts.py)
 """
 from __future__ import annotations
 

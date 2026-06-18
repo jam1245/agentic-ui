@@ -6,7 +6,7 @@
  * `AgentUIPayload` describing *what* to show, *what it means*, and *how* to render
  * it. A generic React renderer turns that payload into a component.
  *
- * Keep this file framework-agnostic (no React, no CopilotKit imports) so it can be
+ * Keep this file framework-agnostic (no React or UI-framework imports) so it can be
  * shared between the front end and any TS tooling, and mirrored 1:1 by the Python
  * pydantic models in `agent/payloads.py`.
  */

@@ -73,11 +73,11 @@ Three representations of one contract — they must not drift:
 ```
 contract/schema.ts (zod)  ──npm run export:schema──►  dist/agent-ui-payload.schema.json
         │                                                        │
-        │ infers                                                 │ given to the LLM as the
-        ▼                                                        ▼ render_ui output schema
+        │ infers                                                 │ reference schema for
+        ▼                                                        ▼ the agent / LLM
 contract/types.ts (TS)                              agent/payloads.py (pydantic)
         │                                                        │
-   React renderers                                        ADK render_ui validation
+   React renderers                                   backend payload validation
 ```
 
 Recommended CI check: export the zod JSON Schema and diff it against

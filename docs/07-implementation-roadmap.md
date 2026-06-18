@@ -7,7 +7,7 @@ A practical crawl/walk/run path. Don't build all nine components on day one — 
 
 - Adopt `AgentUIPayload` ([02-payload-contract.md](02-payload-contract.md)) as-is or trim
   it. **One** schema, owned in one file, mirrored in pydantic.
-- Decide transport: start with **Pattern A** (single `render_ui` action).
+- Decide transport: start simple (one HTTP `/api/chat` that returns the payload).
 - Set up the schema-export → JSON-Schema step and a CI drift check (pydantic vs zod).
 
 ## Phase 1 — Crawl: three components (1 sprint)
@@ -20,8 +20,8 @@ Ship the smallest set that proves the loop end to end:
 
 Deliverables:
 - `validatePayload` wired into `<AgentUIRenderer>` with **table fallback** on any failure.
-- `render_ui` ADK tool validating against pydantic.
-- Agent instruction teaching: trend→line_chart, summary→kpi_card, else→table.
+- Backend payload validation (pydantic) before returning to the UI.
+- Router/agent teaching: trend→line_chart, summary→kpi_card, else→table.
 - Tests: every example payload validates; malformed payloads fall back to a table.
 
 **Exit criteria:** ask "show CPI trend" and "summarize program health" → correct chart,
@@ -61,8 +61,8 @@ Add `timeline`, `gantt`, `variance_table`, `fishbone` as demand warrants. Each i
 ## Anti-patterns to avoid
 
 - ❌ Letting the agent emit React/SVG/HTML. Keep it to structured payloads.
-- ❌ A new ADK tool per question ("show_cpi_chart"). Tools are for *data* and the *one* UI
-  tool; the agent composes them.
+- ❌ A new data tool per question ("show_cpi_chart"). Data tools fetch *data*; the agent
+  picks the component and composes them.
 - ❌ Reshaping `data` into recharts-specific structures in the agent. Keep `data` neutral;
   renderers adapt.
 - ❌ Skipping validation "because the model is usually right." The boundary is an LLM;

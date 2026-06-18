@@ -100,8 +100,7 @@ export function toArtifactContext(
 
 /**
  * The compact, prompt-safe projection of an artifact. THIS is what you feed the chat
- * agent each turn (via CopilotKit useCopilotReadable / ADK session state) — never the
- * full dataset.
+ * agent each turn (from the session store) — never the full dataset.
  */
 export interface ArtifactDigest {
   artifactId: string;

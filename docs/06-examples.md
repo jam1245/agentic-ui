@@ -193,7 +193,7 @@ and they're asserted valid by [the contract test](../src/contract/schema.test.ts
 
 ## The pattern across all eight
 
-Same `render_ui` tool, same `<AgentUIRenderer>`, same contract. Only the payload differs.
+Same agent loop, same `<AgentUIRenderer>`, same contract. Only the payload differs.
 That uniformity is the deliverable: **the team adds value by adding renderers + teaching
 the agent, never by re-plumbing the agent→UI path.**
 

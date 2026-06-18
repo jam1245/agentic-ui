@@ -6,11 +6,11 @@
  * `useSyncExternalStore` (swap for Zustand/Redux if you already use one — the shape and
  * the digest projection are what matter, not the library).
  *
- * IMPORTANT: this is the *client* mirror. For durable, multi-tab, or server-reasoned
- * follow-ups, the same ArtifactContext should also live in the backend session store
- * (ADK session state / your DB). See docs/09-artifact-aware-context.md — the recommended
- * production setup is BOTH: backend is the source of truth, client mirror drives the UI
- * and feeds CopilotKit readables.
+ * NOTE on architecture: in this repo the backend (server/genesis_app.py) is the source of
+ * truth for artifacts and the chat reads them from the /api/chat response, so this client
+ * store is an optional convenience/reference for client-side UI. For durable, multi-tab, or
+ * server-reasoned follow-ups, keep the backend store authoritative (a DB in production).
+ * See docs/09-artifact-aware-context.md.
  */
 import { useSyncExternalStore } from "react";
 import type { ArtifactContext, ArtifactDigest } from "../contract";

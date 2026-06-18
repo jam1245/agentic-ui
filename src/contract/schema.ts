@@ -7,7 +7,7 @@
  * crashing the UI — a malformed chart is still useful as raw data.
  *
  * We use zod because it gives us (a) a parser, (b) typed output, and (c) JSON-Schema
- * export for free — the same schema can be handed to ADK / the LLM as the tool's
+ * export for free — the same schema can be handed to the agent / the LLM as the
  * output schema, keeping the agent and UI in lockstep.
  */
 import { z } from "zod";
