@@ -1,5 +1,9 @@
-# Genesis backend (the project's only LLM backend). Cross-platform: Windows/macOS/Linux.
-# No Google API key is ever used.
+# Google ADK framework — agents/orchestration. The LLM is the internal Genesis model via
+# LiteLLM (no Google cloud, no Gemini, no Google API key).
+google-adk>=1.15.0
+litellm>=1.0.0
+
+# Internal Genesis access + backend + contract validation. Cross-platform.
 requests>=2.31
 python-dotenv>=1.0
 pydantic>=2.7

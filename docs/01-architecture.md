@@ -57,9 +57,11 @@ the conversation **data-aware**.
 
 ## Why each piece is here
 
-- **Internal Genesis LLM** — the reasoning engine. It interprets intent, picks the data
-  tool, and chooses the visualization. The only LLM backend; no Google key.
-  See [`05-backend-and-data-tools.md`](05-backend-and-data-tools.md).
+- **Google ADK** — the agent framework: the `LlmAgent`, tool-calling loop, and (next)
+  orchestrator + sub-agents. Foundational and built to extend. See
+  [`12-adk-architecture.md`](12-adk-architecture.md).
+- **Internal Genesis LLM (via LiteLLM)** — the reasoning brain *inside* ADK. It interprets
+  intent, picks the data tool, and calls `render_chart`. No Google Cloud / Gemini / key.
 - **Data tools / MCP** — the data-access layer behind the agent. Plain functions returning
   rows + source/filters; this is the part that already works today.
 - **Transport (HTTP/JSON)** — the agent's payloads reach the browser over a simple

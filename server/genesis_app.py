@@ -1,22 +1,21 @@
-"""HTTP backend that drives the React demos with the internal Genesis LLM.
+"""HTTP backend for the React UI.
 
-This is the simplest end-to-end path for *your* stack: the React chat POSTs a message,
-this server runs the Genesis agent loop (agent/genesis_agent.py), and returns validated
-render payloads + the artifact digests. The browser renders them with the SAME
-<AgentUIRenderer> used everywhere else.
+Two execution paths, same response shape:
+
+  * REAL (a Genesis key is set): a Google ADK agent — `agent/adk_agents/program_analyst`,
+    brained by the internal Genesis LLM via LiteLLM — reasons, calls data tools, and drives
+    charts through the `render_chart` tool. This is the ADK framework the architecture is
+    built on (orchestrator + plug-and-play sub-agents come next).
+  * MOCK (GENESIS_MOCK=1 or no key): a deterministic engine (agent/genesis_agent.py) so the
+    demo and CI run with zero credentials and no live LLM.
+
+Both return { text, payloads, artifacts, context_used } so React, the contract, and the
+renderers are identical regardless of path.
 
 Run:
     pip install -r agent/requirements.txt
-    # Offline (no key): the server auto-uses the mock client.
-    python3 -m uvicorn server.genesis_app:app --port 8800
-    # Real Genesis (using completions API):
-    # Set in .env: LLM_API_KEY=... LLM_MODEL=openai/gpt-oss-120b
-    python3 -m uvicorn server.genesis_app:app --port 8800
-
-Then `npm run dev:genesis` and open http://localhost:5173/genesis.html.
-
-Sessions are kept in memory keyed by session_id (one client + artifact registry
-each). Swap for a real store in production so context survives restarts / scales.
+    python3 -m uvicorn server.genesis_app:app --port 8800     # mock unless a key is set
+    # Real ADK+Genesis: set LLM_API_KEY (+ LLM_MODEL, LLM_API_BASE) in .env, then run.
 """
 from __future__ import annotations
 
@@ -26,7 +25,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Load .env before reading env vars, so config works the same on Windows/macOS/Linux.
 try:
     from dotenv import load_dotenv
 
@@ -38,36 +36,37 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from agent.genesis_agent import GenesisSession, run_turn  # noqa: E402
+app = FastAPI(title="Agent-driven UI — backend")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-app = FastAPI(title="Agent-driven UI — Genesis backend")
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
-
+# Force the deterministic engine when there's no key, or when explicitly requested, or if
+# ADK isn't importable. Otherwise use the real ADK + Genesis agent.
 _USE_MOCK = os.getenv("GENESIS_MOCK") == "1" or not os.getenv("LLM_API_KEY")
+_MODE = "mock"
 
+if not _USE_MOCK:
+    try:
+        from agent.runner import run_turn as _adk_run_turn  # noqa: E402
 
-def _make_client():
-    if _USE_MOCK:
+        _MODE = "adk"
+    except Exception as exc:  # noqa: BLE001
+        print(f"[backend] ADK unavailable ({exc}); falling back to deterministic engine.")
+        _USE_MOCK = True
+
+if _USE_MOCK:
+    from agent.genesis_agent import GenesisSession, run_turn as _det_run_turn  # noqa: E402
+
+    _SESSIONS: dict[str, GenesisSession] = {}
+
+    def _det_turn(session_id: str, message: str) -> dict:
+        session = _SESSIONS.setdefault(session_id, GenesisSession())
+        r = _det_run_turn(_mock_client(), session, message)
+        return {"text": r.text, "payloads": r.payloads, "artifacts": r.artifacts, "context_used": r.context_used}
+
+    def _mock_client():
         from agent.genesis_client import MockGenesisClient
 
         return MockGenesisClient()
-    from agent.genesis_client import GenesisClient
-
-    client = GenesisClient()
-    client.start_thread()
-    return client
-
-
-# session_id -> (client, GenesisSession)
-_SESSIONS: dict[str, tuple] = {}
-
-
-def _session(session_id: str):
-    if session_id not in _SESSIONS:
-        _SESSIONS[session_id] = (_make_client(), GenesisSession())
-    return _SESSIONS[session_id]
 
 
 class ChatRequest(BaseModel):
@@ -77,23 +76,11 @@ class ChatRequest(BaseModel):
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "mode": "mock" if _USE_MOCK else "genesis"}
+    return {"ok": True, "mode": _MODE}
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest) -> dict:
-    client, session = _session(req.session_id)
-    result = run_turn(client, session, req.message)
-    return {
-        "text": result.text,
-        "payloads": result.payloads,
-        "artifacts": result.artifacts,
-        # Drives the UI's "🧠 used context" badge — proves a follow-up reused stored data.
-        "context_used": result.context_used,
-    }
-
-
-@app.get("/api/artifacts")
-def artifacts(session_id: str = "default") -> dict:
-    _client, session = _session(session_id)
-    return {"artifacts": list(session.state.get("artifacts", {}).values())}
+    if _USE_MOCK:
+        return _det_turn(req.session_id, req.message)
+    return _adk_run_turn(req.session_id, req.message)

@@ -94,12 +94,12 @@ deterministic answers.
 prints each raw model response to the terminal — paste a couple of those `[genesis chat]`
 lines if a live answer looks off and we'll tune from there.
 
-### Go live with the real Genesis LLM
+### Go live with the real ADK + Genesis agent
 
 ```bash
-# copy .env.example → .env and set LLM_API_KEY + LLM_MODEL (loaded automatically)
+# copy .env.example → .env and set LLM_API_KEY (+ LLM_MODEL, LLM_API_BASE)
 #   macOS/Linux: cp .env.example .env   |   Windows: copy .env.example .env
-npm run dev:genesis        # /api/health now reports mode:"genesis"
+npm run dev:genesis        # /api/health now reports mode:"adk" (Google ADK + Genesis)
 ```
 
 The key stays server-side (in the Python backend), never in the browser. Details:

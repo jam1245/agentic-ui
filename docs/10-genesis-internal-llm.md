@@ -1,16 +1,21 @@
-# 10. Using the Internal Genesis LLM (zero → working)
+# 10. The Genesis LLM + the offline engine
 
-This is the **only LLM backend**. Genesis is an OpenAI-compatible **Completions** API
-(`POST /completions` with `{model, prompt}`), reached at `https://api.ai.us.lmco.com/v1`
-with a bearer `LLM_API_KEY` and `LLM_MODEL` (e.g. `openai/gpt-oss-120b`). It does not
-change the contracts: Genesis drives the **same** `AgentUIPayload` + `ArtifactContext`,
-rendered by the **same** `<AgentUIRenderer>`.
+The internal **Genesis** LLM (`openai/gpt-oss-120b`) is the only model used — no Google
+Cloud, no Gemini, no Google key. It powers the system **two** ways:
 
-## The hybrid design (why the demo is reliable)
+1. **Primary (with a key): inside Google ADK.** The ADK `LlmAgent` runs on Genesis via
+   LiteLLM and drives the UI through tools. That's the real framework — see
+   **[12-adk-architecture.md](12-adk-architecture.md)**.
+2. **Offline/mock (no key): a deterministic engine** (`agent/genesis_agent.py`) that needs
+   no LLM at all, so demos and CI run with zero credentials.
 
-`gpt-oss-120b` is a **reasoning model**: asked for strict JSON it tends to "think out loud"
-first, so a pure model-emits-JSON loop is flaky (it rendered ~1 of 5 prompts in live
-testing). We split the work along the model's strengths:
+Both produce the **same** `AgentUIPayload` + `ArtifactContext`, rendered by the **same**
+`<AgentUIRenderer>`. The rest of this page documents the **deterministic offline engine**
+(the mock path); for the live agent read [12](12-adk-architecture.md).
+
+## The deterministic engine (offline/mock path)
+
+It splits the work so the offline demo is always reliable:
 
 | Concern | Owner | Why |
 | --- | --- | --- |

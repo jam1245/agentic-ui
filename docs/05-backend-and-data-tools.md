@@ -2,20 +2,25 @@
 
 The backend has three jobs: **fetch data** (from MCP / enterprise systems), **pick the
 visualization and answer questions about it**, and **emit the two contracts** (render
-payload + artifact). The LLM is the internal **Genesis** model — no Google ADK, no Google
-key. Crucially, the structure and the answers are **computed deterministically**; the LLM
-is optional polish (see below).
+payload + artifact).
+
+**This is a Google ADK backend.** The primary path is an ADK `LlmAgent` brained by the
+internal **Genesis** LLM via LiteLLM (no Google Cloud / Gemini / Google key) — it reasons,
+calls the data tools, and drives the UI via the `render_chart` tool. See the full framework
+in [12-adk-architecture.md](12-adk-architecture.md). A deterministic, LLM-free engine
+(`agent/genesis_agent.py`) is the **offline/mock fallback** for demos and CI.
 
 ```
-DATA tools  = data access / computation        → return rows      (agent/data_tools.py)
-AGENT loop  = deterministic router + analytics  → payload + artifact + answers (agent/genesis_agent.py)
-LLM         = internal Genesis (chat endpoint)  → conversational answers + fallback (agent/genesis_client.py)
+DATA tools  = data access / computation   → return rows      (agent/tools/data_tools.py)
+ADK agent   = LlmAgent (LiteLlm→Genesis)  → reasons + calls tools  (agent/adk_agents/…)
+render_chart= the data→UI tool            → payload + artifact      (agent/tools/render_tools.py)
+fallback    = deterministic engine        → offline/mock answers    (agent/genesis_agent.py)
 ```
 
 ## Data tools — your MCP / enterprise layer
 
-[`agent/data_tools.py`](../agent/data_tools.py): plain functions that return rows plus
-light source metadata. They know nothing about charts.
+[`agent/tools/data_tools.py`](../agent/tools/data_tools.py): plain functions that return
+rows plus light source metadata. They know nothing about charts.
 
 ```python
 def get_cpi_trend(program: str, months: int = 6) -> dict:
@@ -30,23 +35,27 @@ def get_cpi_trend(program: str, months: int = 6) -> dict:
 In production these wrap real MCP servers. The `source`/`filters` they return flow straight
 into the payload's `metadata` and the artifact's provenance — for free.
 
-## The hybrid agent loop
+## The ADK agent loop (primary)
 
-`gpt-oss-120b` is a reasoning model that resists clean structured output, so
-[`agent/genesis_agent.py`](../agent/genesis_agent.py) does the reliable work in Python and
-treats the model as optional:
+[`agent/adk_agents/program_analyst/agent.py`](../agent/adk_agents/program_analyst/agent.py)
+is an ADK `LlmAgent(model=get_model(), tools=[…])`. ADK's native tool-calling loop (running
+on Genesis via LiteLLM) does the reasoning:
 
-- **`route_chart(question)`** deterministically maps a chart request to a data tool +
-  component + field mapping (structure can't be broken by the model),
-- the **data tool** supplies the real rows (the model never fabricates numbers),
-- **`_converse(...)`** answers *questions about plotted data* by sending the LLM a rich brief
-  (the chart's rows + computed key facts + the canvas inventory) over the **chat endpoint**,
-  which returns the model's final answer (not its chain-of-thought). This lets it converse —
-  plans, director summaries, "what should I worry about" — not just recite numbers.
-- **`_analyze(question, artifact, rows)`** is the deterministic fallback: if the LLM output is
-  unusable (or `GENESIS_NO_LLM=1`, or offline/mock), it computes the answer from the rows
-  (highest/lowest, average, difference, specific lookup, trend, top/least risk, worst
-  variance) — always correct and clean. So the reply is never broken or content-free.
+- the agent calls a **data tool** to get rows (so it answers with real numbers),
+- it calls **`render_chart`** ([render_tools.py](../agent/tools/render_tools.py)) to plot —
+  that tool fetches authoritative rows, builds + validates the `AgentUIPayload`, records an
+  artifact, and stages both into ADK session state; [runner.py](../agent/runner.py) returns
+  them to React,
+- it calls **`get_artifact_data` / `list_artifacts`** to answer follow-ups about a chart it
+  already showed (plans, director summaries, "what should I worry about").
+
+## The deterministic fallback engine (offline/mock)
+
+[`agent/genesis_agent.py`](../agent/genesis_agent.py) is an LLM-free engine used when
+`GENESIS_MOCK=1` or no key is set. It maps a request to a data tool + component
+(`route_chart`) and computes answers from the rows (`_analyze`: highest/lowest, average,
+difference, trend, top/least risk, worst variance). Always correct and clean, so demos and
+CI run with zero credentials and the UI is identical to the ADK path.
 
 We assemble + validate an `AgentUIPayload` (pydantic), store an `ArtifactContext`, and
 return both. Questions about a chart rehydrate its rows from the artifact registry and are
