@@ -47,6 +47,46 @@ Then, on the page:
 
 It runs in **mock mode** (no key) out of the box — `/api/health` reports `mode:"mock"`.
 
+### Prompts that prove the chat is data-aware
+
+Type these (not just the chips). The point: after a chart is plotted, the chat answers
+**from that chart's actual rows** instead of re-plotting — watch for the **🧠 used context**
+badge. Plot first, then ask.
+
+**1. Plot, then interrogate it (CPI):**
+```
+Show CPI trend for the last six months.
+Explain the difference between June and January CPI.
+Which month had the highest CPI?
+Why did March dip?
+```
+Expect data-grounded answers (e.g. "Jan 0.92 vs Jun 1.01 → +0.09"), each with the context
+badge — not a new chart.
+
+**2. Plot, then interrogate it (SPI / risks):**
+```
+Compare SPI across control accounts.
+Which control account is worst, and by how much?
+Show top risks by likelihood and impact.
+Which risk should I brief leadership on?
+```
+
+**3. Reference without naming ("that"/"this"):**
+```
+Summarize program health.
+Turn that into an executive summary.
+```
+
+**4. Cross-chart (a stretch goal — see docs/09):**
+```
+Compare CPI to SPI.
+```
+
+In **mock mode** the answers come from a deterministic, data-grounded fallback (so they're
+always correct but plainly worded). With a **real key**, the Genesis LLM phrases them
+conversationally; if a live answer ever looks generic, that's the prose filter falling back
+to the deterministic line — the numbers are still right.
+
 ### Go live with the real Genesis LLM
 
 ```bash

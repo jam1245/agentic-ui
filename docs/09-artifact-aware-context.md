@@ -171,6 +171,31 @@ for production, persist server-side so context survives restarts / scales across
 7. Full data is rehydrated only when a follow-up needs it (get_artifact / dataRef re-query).
 ```
 
+## Free-form questions about plotted data (and the canvas direction)
+
+A rendered chart isn't just answerable by canned follow-ups — the chat reasons over the
+chart's **actual rows**. `run_turn` ([`agent/genesis_agent.py`](../agent/genesis_agent.py))
+routes each message:
+
+- **a chart request** ("show CPI trend") → plot it + store the artifact;
+- **a question about plotted data** ("explain the difference between Jan and Jun CPI",
+  "which control account is worst?", "why did March dip?") → **do not re-plot**. Pick the
+  relevant artifact (by topic), and answer from its full rows.
+
+The answer prompt includes (a) the **names of every chart on the canvas** and (b) the
+**full rows of the relevant chart**, so the model can cite exact numbers and reason across
+charts. If the model returns junk (or you're offline), a **data-grounded fallback** still
+cites real values — e.g. it computes "Jan 0.92 vs Jun 1.01 → +0.09" deterministically.
+
+> **Toward a multi-plot canvas:** this is exactly the mechanism that scales to a canvas of
+> many triggered plots. Every plot pushes its `ArtifactContext` (rows + digest) into the
+> session registry; the chat is handed the canvas inventory each turn and rehydrates the
+> rows it needs. To grow further: (1) select the relevant artifact by embedding/keyword
+> when there are many, (2) pass *multiple* artifacts' rows for cross-chart questions
+> ("compare CPI to SPI"), and (3) cap rows / summarize large series before they enter the
+> prompt. The contract already carries everything needed; these are retrieval refinements,
+> not architecture changes.
+
 ## Worked follow-up examples
 
 ### Example 1 — CPI trend, then "why did March dip?"

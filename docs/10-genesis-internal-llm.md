@@ -67,6 +67,13 @@ The two goals, made concrete:
   summary" answer from that stored context with a **🧠 used context** badge — *this* is the
   artifact-aware addendum.
 
+**Then type free-form questions** (not just chips) to see the chat reason over the rows:
+*"Explain the difference between June and January CPI"*, *"Which month had the highest
+CPI?"*, *"Which control account is worst, and by how much?"*. The agent answers from the
+plotted chart's data instead of re-plotting. A fuller prompt list is in
+[TESTING.md](../TESTING.md#prompts-that-prove-the-chat-is-data-aware); the mechanism is in
+[09-artifact-aware-context.md](09-artifact-aware-context.md#free-form-questions-about-plotted-data-and-the-canvas-direction).
+
 ## Switch to the real Genesis LLM
 
 Copy `.env.example` to `.env` and fill in your values — that's it. Both the Python backend

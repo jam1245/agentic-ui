@@ -84,7 +84,7 @@ def route_chart(question: str) -> Optional[ChartIntent]:
             "CPI Trend — Last 6 Months", "trend_analysis", {"x": "month", "y": "cpi"},
             "CPI recovered from 0.92 to 1.01 over six months, with a dip to 0.90 in March.",
         )
-    if "spi" in q:
+    if "spi" in q or "control account" in q:
         return ChartIntent(
             "get_spi_by_control_account", {"program": "P-117"}, "bar_chart",
             "SPI by Control Account", "comparison", {"x": "account", "y": "spi"},
@@ -105,15 +105,39 @@ def route_chart(question: str) -> Optional[ChartIntent]:
     return None
 
 
-_FOLLOWUP_MARKERS = (
-    "summar", "executive", "brief", "leadership", "explain", "understand",
-    "tell me more", "that", "this", "it ", "those", "elaborate", "why",
+# Words that mean "draw me a chart" vs. "talk to me about the data already shown".
+_PLOT_VERBS = ("show", "plot", "chart", "graph", "display", "visualize", "visualise", "draw", "render")
+_QUESTION_MARKERS = (
+    "explain", "difference", "compare", "between", " vs", "versus", "why", "what", "which",
+    "how ", "highest", "lowest", "average", "mean", "biggest", "largest", "smallest", "most",
+    "least", "increase", "decrease", "change", "trend", "summar", "executive", "brief",
+    "leadership", "understand", "tell me", "elaborate", "describe", "interpret", "that", "this",
 )
 
+# Map question keywords to the component whose stored artifact can answer them.
+_TOPIC_COMPONENT = [
+    (("cpi", "cost performance", "march"), "line_chart"),
+    (("spi", "schedule perf", "control account", "account"), "bar_chart"),
+    (("risk", "likelihood", "impact"), "risk_matrix"),
+    (("health", "kpi", "overall"), "kpi_card"),
+    (("cam", "variance", "bcwp", "acwp"), "variance_table"),
+]
 
-def is_followup(question: str) -> bool:
+
+def _wants_plot(q: str) -> bool:
+    return any(v in q for v in _PLOT_VERBS)
+
+
+def _is_question(question: str) -> bool:
     q = question.lower()
-    return any(m in q for m in _FOLLOWUP_MARKERS)
+    return question.strip().endswith("?") or any(m in q for m in _QUESTION_MARKERS)
+
+
+def _topic_component(q: str) -> Optional[str]:
+    for kws, comp in _TOPIC_COMPONENT:
+        if any(k in q for k in kws):
+            return comp
+    return None
 
 
 # --------------------------------------------------------------------------------------
@@ -203,76 +227,135 @@ def _digests(session: GenesisSession) -> list[dict]:
 
 
 # --------------------------------------------------------------------------------------
-# The turn
+# Data Q&A — the chat actually reasons over a plotted chart's rows.
+# --------------------------------------------------------------------------------------
+
+def _data_fallback(question: str, art: ArtifactContext, rows: list) -> str:
+    """A DATA-GROUNDED fallback used in mock mode or when the model's prose is rejected.
+    It cites real numbers from the artifact so the reply is never a content-free 'canned'
+    line. Handles two common shapes: two-point comparisons and 'why did March dip'."""
+    q = question.lower()
+    fields = art.fields or {}
+    x, y = fields.get("x"), fields.get("y")
+
+    if x and y and rows:
+        # "why did March dip?" style — name the low point.
+        if "march" in q:
+            mar = next((r for r in rows if str(r.get(x, "")).lower().startswith("mar")), None)
+            if mar is not None:
+                return (
+                    f"In {art.title}, March is the low point at {mar.get(y)} before recovering "
+                    f"toward target — it lines up with the late requirements baseline in the risks."
+                )
+        # "difference between A and B" style — find the two referenced points and subtract.
+        hits = []
+        for r in rows:
+            label = str(r.get(x, "")).lower()
+            if label and label in q and r not in hits:
+                hits.append(r)
+        if len(hits) >= 2:
+            a, b = hits[0], hits[1]
+            try:
+                diff = float(b[y]) - float(a[y])
+                return (
+                    f"In {art.title}, {a.get(x)} {y} is {a.get(y)} and {b.get(x)} {y} is "
+                    f"{b.get(y)} — a difference of {diff:+.2f}."
+                )
+            except (TypeError, ValueError, KeyError):
+                pass
+        # Otherwise lay out the series so the answer still contains the actual values.
+        pts = ", ".join(f"{r.get(x)}={r.get(y)}" for r in rows[:8])
+        return f"{art.title}: {pts}."
+
+    return f"{art.title} — {art.summaryForFutureTurns}"
+
+
+def _answer_about_data(client, session: GenesisSession, question: str, art: ArtifactContext) -> TurnResult:
+    """Answer a free-form question using the FULL rows of a plotted chart, with the rest of
+    the canvas (other artifacts) named so the model can reason across charts."""
+    rows = art.fullData or []
+    canvas = "; ".join(f"{d.title} ({d.artifactType})" for d in list_digests(session.state)) or "none"
+    answer = _llm_prose(
+        client,
+        (
+            "You are a program analyst talking with a user about charts already on screen.\n"
+            f"Charts on the canvas: {canvas}.\n"
+            f"The relevant chart is \"{art.title}\". Its full data is: {json.dumps(rows)}.\n"
+            f"User question: \"{question}\"\n"
+            "Answer the question directly and conversationally in 1-3 sentences, citing the "
+            "exact numbers from the data. No preamble, no JSON, no reasoning out loud."
+        ),
+        _data_fallback(question, art, rows),
+    )
+    return TurnResult(answer, [], _digests(session), [{"artifactId": art.artifactId, "title": art.title}])
+
+
+def _make_chart(client, session: GenesisSession, question: str, intent: ChartIntent) -> TurnResult:
+    result = TOOLS[intent.tool](**intent.args)
+    payload = _build_payload(intent, result)
+    summary = _llm_prose(
+        client,
+        f"Data for \"{intent.title}\": {json.dumps(result.get('rows', []))}. Give the single "
+        f"most important takeaway for a program manager in ONE sentence. No preamble.",
+        intent.summary,
+    )
+    artifact = to_artifact_context(
+        payload,
+        original_user_question=question,
+        source_tool=intent.tool,
+        summary_for_future_turns=summary,
+    )
+    payload.artifactId = artifact.artifactId
+    store_artifact(session.state, artifact)
+    return TurnResult(summary, [payload.model_dump(exclude_none=True)], _digests(session))
+
+
+# --------------------------------------------------------------------------------------
+# The turn — route between "draw a chart" and "talk about the data already drawn".
 # --------------------------------------------------------------------------------------
 
 def run_turn(client, session: GenesisSession, user_question: str) -> TurnResult:
     q = user_question.lower()
+    has_art = bool(list_digests(session.state))
+    wants_plot = _wants_plot(q)
+    asking = _is_question(user_question)
 
-    # 1) Specific follow-up: "why did March dip?" → answer from the stored CPI chart.
-    if "march" in q and ("dip" in q or "why" in q or "drop" in q):
-        art = _latest(session, "line_chart") or _latest(session)
-        if art:
-            rows = art.fullData or []
-            march = next((r for r in rows if str(r.get("month", "")).lower().startswith("mar")), None)
-            mval = march.get("cpi") if march else "0.91"
-            fallback = (
-                f"March is the low point of the CPI series at {mval} — the only month that "
-                f"dips below the rising trend — before recovering toward target. It lines up "
-                f"with the late requirements baseline flagged in the schedule risks."
-            )
-            answer = _llm_prose(
-                client,
-                f"The user asked: \"{user_question}\". Here is the CPI data behind the chart "
-                f"titled \"{art.title}\": {json.dumps(rows)}. Answer in 1-2 sentences, cite the "
-                f"March value, conversational tone. Plain prose only.",
-                fallback,
-            )
-            return TurnResult(answer, [], _digests(session), [{"artifactId": art.artifactId, "title": art.title}])
-        # No chart yet — nudge the user.
-        return TurnResult(
-            "Ask me to \"show CPI trend\" first, then I can explain the March dip from that chart.",
-            [], _digests(session),
-        )
+    # A) A QUESTION about data already on the canvas → answer from the rows (don't re-plot).
+    #    This is what makes the chat data-aware: "explain the difference between Jan and Jun
+    #    CPI", "which control account is worst", "why did March dip" all land here.
+    if has_art and asking and not wants_plot:
+        comp = _topic_component(q)
+        if comp:
+            art = _latest(session, comp)
+            if art:
+                return _answer_about_data(client, session, user_question, art)
+            # Topic named but not plotted yet → fall through and plot it.
+        else:
+            art = _latest(session)  # generic "summarize that", "tell me more"
+            if art:
+                return _answer_about_data(client, session, user_question, art)
 
-    # 2) Fresh chart request → deterministic structure + data, LLM/deterministic takeaway.
+    # B) A chart request → plot it (explicit "show…", or a topic not yet on the canvas).
     intent = route_chart(user_question)
-    if intent:
-        result = TOOLS[intent.tool](**intent.args)
-        payload = _build_payload(intent, result)
-        summary = _llm_prose(
-            client,
-            f"Data for \"{intent.title}\": {json.dumps(result.get('rows', []))}. Give the single "
-            f"most important takeaway for a program manager in ONE sentence. No preamble.",
-            intent.summary,
-        )
-        artifact = to_artifact_context(
-            payload,
-            original_user_question=user_question,
-            source_tool=intent.tool,
-            summary_for_future_turns=summary,
-        )
-        payload.artifactId = artifact.artifactId
-        store_artifact(session.state, artifact)
-        return TurnResult(summary, [payload.model_dump(exclude_none=True)], _digests(session))
+    if intent and (wants_plot or _latest(session, intent.component) is None):
+        return _make_chart(client, session, user_question, intent)
 
-    # 3) Generic follow-up about something already shown → summarize from context.
-    if is_followup(user_question):
+    # C) Topic already plotted and they referenced it without "show" → talk about it.
+    if intent:
+        art = _latest(session, intent.component) or _latest(session)
+        if art and not wants_plot:
+            return _answer_about_data(client, session, user_question, art)
+        return _make_chart(client, session, user_question, intent)
+
+    # D) Generic follow-up with no topic keyword → use the most recent chart.
+    if has_art and asking:
         art = _latest(session)
         if art:
-            fallback = f"From {art.title}: {art.summaryForFutureTurns}"
-            answer = _llm_prose(
-                client,
-                f"The user asked: \"{user_question}\". Based on the chart \"{art.title}\" "
-                f"(summary: {art.summaryForFutureTurns}) with data {json.dumps(art.fullData or [])}, "
-                f"answer in 1-3 sentences, conversational, cite numbers. Plain prose only.",
-                fallback,
-            )
-            return TurnResult(answer, [], _digests(session), [{"artifactId": art.artifactId, "title": art.title}])
+            return _answer_about_data(client, session, user_question, art)
 
-    # 4) Nothing matched → helpful guidance (never a bare "?" ).
+    # E) Nothing to work with → helpful guidance (never a bare "?").
     return TurnResult(
         "I can chart CPI trend, SPI by control account, top risks, program health, or CAM "
-        "variance — then answer follow-ups about whatever I show. What would you like to see?",
+        "variance — then discuss the numbers behind any of them. What would you like to see?",
         [], _digests(session),
     )
