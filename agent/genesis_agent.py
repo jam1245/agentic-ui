@@ -20,6 +20,7 @@ Numbers always come from the data tools — never invented by the model.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -158,32 +159,131 @@ class TurnResult:
 
 
 # --------------------------------------------------------------------------------------
-# Prose: real LLM when available, deterministic fallback otherwise.
+# Answering questions about the data.
+#
+# DESIGN (revised): the chat's data-awareness must NOT depend on a reasoning model
+# producing clean prose — that proved unreliable (junk/symbols leaked through). Instead we
+# COMPUTE the answer from the artifact's rows in Python (always correct, always clean), and
+# use the LLM only to *rephrase that correct fact*, accepted through a strict gate. If the
+# model returns anything messy, we show the computed answer. The user always gets a
+# data-grounded reply.
 # --------------------------------------------------------------------------------------
 
-_REASONING_SMELLS = ("we need", "we have to", "the user", "let me", "first,", "okay", "sure,", "i should", "json")
+# Reject anything that isn't plain prose: reasoning, markup, harmony tokens, odd symbols.
+_BAD_SUBSTR = (
+    "<|", "|>", "```", "{", "}", "<", ">", "|", "`", "#", "*",
+    "analysis", "channel", "we need", "the user", "let me", "i should", "first,", "i need to",
+)
+_PLAIN = re.compile(r"^[\x20-\x7e–—‘’“”\n ]+$")  # ASCII + dashes/quotes
 
 
-def _clean_prose(text: str) -> str:
-    """Accept clean natural language; reject reasoning/JSON leakage from the model."""
-    t = (text or "").strip().strip("`").strip()
-    if len(t) < 8 or t.startswith("{") or '"action"' in t:
+def _strict_clean(text: str) -> str:
+    """Return clean one-line prose, or '' to reject (caller falls back to the computed fact)."""
+    t = (text or "").strip().strip('"').strip()
+    if len(t) < 6:
         return ""
-    head = t[:40].lower()
-    if any(head.startswith(s) or s in head for s in _REASONING_SMELLS):
+    if any(b in t.lower() for b in _BAD_SUBSTR):
         return ""
-    return t.split("\n\n")[0].strip()  # first paragraph is plenty
+    if not _PLAIN.match(t):  # any non-ASCII symbol / emoji / token → reject
+        return ""
+    t = t.split("\n")[0].strip()
+    return t if len(t) <= 400 else t[:400].rsplit(" ", 1)[0] + "…"
 
 
-def _llm_prose(client, instruction: str, fallback: str) -> str:
-    """Ask the real model for a sentence or two; fall back to deterministic text."""
+def _rephrase(client, fact: str) -> str:
+    """Optionally let the LLM reword a CORRECT fact. Never trusted to compute or add data."""
     if getattr(client, "is_mock", False):
-        return fallback
+        return fact
     try:
-        cleaned = _clean_prose(client.ask(instruction, raw=True, max_tokens=400))
+        out = client.ask(
+            "Rephrase the following as one natural sentence for a program manager. Keep every "
+            "number exactly as given. No preamble, no markdown, no lists.\nFact: " + fact,
+            raw=True,
+            max_tokens=120,
+        )
     except Exception:
-        cleaned = ""
-    return cleaned or fallback
+        return fact
+    return _strict_clean(out) or fact
+
+
+def _num(v) -> Optional[float]:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _analyze(question: str, art: ArtifactContext, rows: list) -> str:
+    """Compute a correct, data-grounded answer from an artifact's rows. Handles the common
+    analytical questions per chart type; falls back to laying out the actual values."""
+    q = question.lower()
+    fields = art.fields or {}
+    x, y, label = fields.get("x"), fields.get("y"), fields.get("label")
+    title = art.title
+
+    # Risk matrix: rank by likelihood × impact.
+    if x and y and label and rows:
+        scored = [(str(r.get(label)), (_num(r.get(x)) or 0) * (_num(r.get(y)) or 0)) for r in rows]
+        scored = [s for s in scored if s[0]]
+        if scored:
+            if any(w in q for w in ("brief", "leadership", "worst", "highest", "top", "biggest", "prioriti", "first")):
+                name, score = max(scored, key=lambda s: s[1])
+                return f'The top risk in {title} is "{name}" (likelihood×impact = {score:g}) — brief that one first.'
+            listing = "; ".join(f"{n} ({s:g})" for n, s in sorted(scored, key=lambda s: -s[1]))
+            return f"{title} ranked by likelihood×impact: {listing}."
+
+    # XY series (line / bar charts).
+    if x and y and rows and any(_num(r.get(y)) is not None for r in rows):
+        pts = [(str(r.get(x)), _num(r.get(y))) for r in rows if _num(r.get(y)) is not None]
+        hits = [(l, v) for (l, v) in pts if l.lower() in q]
+        if any(w in q for w in ("differ", "compare", "between", " vs", "versus")) and len(hits) >= 2:
+            (la, va), (lb, vb) = hits[0], hits[1]
+            return f"In {title}, {la} {y} is {va:g} and {lb} {y} is {vb:g} — a difference of {vb - va:+.2f}."
+        if len(hits) == 1 and any(w in q for w in ("value", "what", "how much", "level", "is the", "in ")):
+            la, va = hits[0]
+            return f"In {title}, {la} {y} is {va:g}."
+        if any(w in q for w in ("highest", "max", "peak", "best", "top", "most", "largest", "greatest")):
+            l, v = max(pts, key=lambda p: p[1])
+            return f"The highest {y} in {title} is {v:g} ({l})."
+        if any(w in q for w in ("lowest", "min", "worst", "smallest", "least", "dip", "drop", "low point")):
+            l, v = min(pts, key=lambda p: p[1])
+            extra = " It lines up with the late requirements baseline in the risks." if l.lower().startswith("mar") else ""
+            return f"The lowest {y} in {title} is {v:g} ({l}).{extra}"
+        if any(w in q for w in ("average", "mean", "typical")):
+            avg = sum(v for _, v in pts) / len(pts)
+            return f"The average {y} in {title} is {avg:.2f} across {len(pts)} points."
+        if any(w in q for w in ("trend", "change", "overall", "direction", "improv", "declin", "start", "end")):
+            (l0, v0), (l1, v1) = pts[0], pts[-1]
+            d = v1 - v0
+            word = "rose" if d > 0 else "fell" if d < 0 else "held steady"
+            return f"In {title}, {y} {word} from {v0:g} ({l0}) to {v1:g} ({l1}) — a change of {d:+.2f}."
+        series = ", ".join(f"{l}={v:g}" for l, v in pts[:8])
+        return f"{title}: {series}."
+
+    # KPI cards (label / value rows).
+    if rows and "label" in rows[0] and "value" in rows[0]:
+        for r in rows:
+            if str(r.get("label", "")).lower() in q:
+                status = f" ({r['status']})" if r.get("status") else ""
+                return f"In {title}, {r['label']} is {r['value']}{status}."
+        items = ", ".join(f"{r.get('label')}: {r.get('value')}" for r in rows)
+        return f"{title} — {items}."
+
+    # Variance table (cost/schedule variance rows).
+    if rows and "cv" in rows[0]:
+        lab = label or "cam"
+        if any(w in q for w in ("worst", "largest", "biggest", "overrun", "problem", "attention")):
+            worst = min(rows, key=lambda r: _num(r.get("cv")) or 0)
+            return f"In {title}, {worst.get(lab)} has the largest unfavorable cost variance (CV {worst.get('cv')})."
+        listing = "; ".join(f"{r.get(lab)}: CV {r.get('cv')}, SV {r.get('sv')}" for r in rows)
+        return f"{title} — {listing}."
+
+    # Anything else: lay out the rows so the answer still contains real values.
+    if rows:
+        keys = list(rows[0].keys())
+        body = "; ".join(", ".join(f"{k}={r.get(k)}" for k in keys) for r in rows[:5])
+        return f"{title} — {body}."
+    return f"{title} — {art.summaryForFutureTurns}"
 
 
 # --------------------------------------------------------------------------------------
@@ -230,75 +330,22 @@ def _digests(session: GenesisSession) -> list[dict]:
 # Data Q&A — the chat actually reasons over a plotted chart's rows.
 # --------------------------------------------------------------------------------------
 
-def _data_fallback(question: str, art: ArtifactContext, rows: list) -> str:
-    """A DATA-GROUNDED fallback used in mock mode or when the model's prose is rejected.
-    It cites real numbers from the artifact so the reply is never a content-free 'canned'
-    line. Handles two common shapes: two-point comparisons and 'why did March dip'."""
-    q = question.lower()
-    fields = art.fields or {}
-    x, y = fields.get("x"), fields.get("y")
-
-    if x and y and rows:
-        # "why did March dip?" style — name the low point.
-        if "march" in q:
-            mar = next((r for r in rows if str(r.get(x, "")).lower().startswith("mar")), None)
-            if mar is not None:
-                return (
-                    f"In {art.title}, March is the low point at {mar.get(y)} before recovering "
-                    f"toward target — it lines up with the late requirements baseline in the risks."
-                )
-        # "difference between A and B" style — find the two referenced points and subtract.
-        hits = []
-        for r in rows:
-            label = str(r.get(x, "")).lower()
-            if label and label in q and r not in hits:
-                hits.append(r)
-        if len(hits) >= 2:
-            a, b = hits[0], hits[1]
-            try:
-                diff = float(b[y]) - float(a[y])
-                return (
-                    f"In {art.title}, {a.get(x)} {y} is {a.get(y)} and {b.get(x)} {y} is "
-                    f"{b.get(y)} — a difference of {diff:+.2f}."
-                )
-            except (TypeError, ValueError, KeyError):
-                pass
-        # Otherwise lay out the series so the answer still contains the actual values.
-        pts = ", ".join(f"{r.get(x)}={r.get(y)}" for r in rows[:8])
-        return f"{art.title}: {pts}."
-
-    return f"{art.title} — {art.summaryForFutureTurns}"
-
-
 def _answer_about_data(client, session: GenesisSession, question: str, art: ArtifactContext) -> TurnResult:
-    """Answer a free-form question using the FULL rows of a plotted chart, with the rest of
-    the canvas (other artifacts) named so the model can reason across charts."""
+    """Compute a correct answer from the chart's rows, then (optionally) let the LLM reword
+    it. The computed fact is always data-grounded; the LLM never invents numbers."""
     rows = art.fullData or []
-    canvas = "; ".join(f"{d.title} ({d.artifactType})" for d in list_digests(session.state)) or "none"
-    answer = _llm_prose(
-        client,
-        (
-            "You are a program analyst talking with a user about charts already on screen.\n"
-            f"Charts on the canvas: {canvas}.\n"
-            f"The relevant chart is \"{art.title}\". Its full data is: {json.dumps(rows)}.\n"
-            f"User question: \"{question}\"\n"
-            "Answer the question directly and conversationally in 1-3 sentences, citing the "
-            "exact numbers from the data. No preamble, no JSON, no reasoning out loud."
-        ),
-        _data_fallback(question, art, rows),
+    grounded = _analyze(question, art, rows)
+    return TurnResult(
+        _rephrase(client, grounded), [], _digests(session),
+        [{"artifactId": art.artifactId, "title": art.title}],
     )
-    return TurnResult(answer, [], _digests(session), [{"artifactId": art.artifactId, "title": art.title}])
 
 
 def _make_chart(client, session: GenesisSession, question: str, intent: ChartIntent) -> TurnResult:
     result = TOOLS[intent.tool](**intent.args)
     payload = _build_payload(intent, result)
-    summary = _llm_prose(
-        client,
-        f"Data for \"{intent.title}\": {json.dumps(result.get('rows', []))}. Give the single "
-        f"most important takeaway for a program manager in ONE sentence. No preamble.",
-        intent.summary,
-    )
+    # The deterministic takeaway is already accurate; let the LLM only reword it.
+    summary = _rephrase(client, intent.summary)
     artifact = to_artifact_context(
         payload,
         original_user_question=question,

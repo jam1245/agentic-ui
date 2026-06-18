@@ -107,6 +107,12 @@ class GenesisClient:
         except (KeyError, IndexError, ValueError) as e:
             raise RuntimeError(f"Failed to parse completions response: {e}\nResponse: {response.text}")
 
+        # Set GENESIS_DEBUG=1 to see EXACTLY what the model returns (helps decide whether the
+        # raw /completions text needs the chat endpoint, different stops, etc.).
+        if os.getenv("GENESIS_DEBUG") == "1":
+            import sys
+            print(f"[genesis {'prose' if raw else 'json'}] {text[:500]!r}", file=sys.stderr)
+
         if raw:
             return text.strip()
         # JSON mode: drop any reasoning preamble before the first brace.

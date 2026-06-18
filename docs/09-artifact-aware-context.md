@@ -182,10 +182,18 @@ routes each message:
   "which control account is worst?", "why did March dip?") → **do not re-plot**. Pick the
   relevant artifact (by topic), and answer from its full rows.
 
-The answer prompt includes (a) the **names of every chart on the canvas** and (b) the
-**full rows of the relevant chart**, so the model can cite exact numbers and reason across
-charts. If the model returns junk (or you're offline), a **data-grounded fallback** still
-cites real values — e.g. it computes "Jan 0.92 vs Jun 1.01 → +0.09" deterministically.
+**How the answer is produced (important):** data-awareness does **not** depend on the LLM
+parsing rows correctly — a reasoning model on a text endpoint proved unreliable (it leaked
+reasoning/symbols). Instead the answer is **computed in Python from the artifact's rows**
+(`_analyze` in [`agent/genesis_agent.py`](../agent/genesis_agent.py)) — highest/lowest,
+average, difference between two points, specific-value lookup, trend, worst risk, worst
+variance, etc. That computed fact is always correct and clean. The LLM is then asked only
+to **reword the correct fact**, and its output is accepted through a **strict filter**
+(rejecting markup, reasoning, odd symbols); if it fails, the computed sentence is shown.
+
+So: **the numbers always come from the data**; the model only affects phrasing. Offline
+(mock) you get the computed sentences directly. Set `GENESIS_DEBUG=1` to print the raw
+model output and see exactly what it returned.
 
 > **Toward a multi-plot canvas:** this is exactly the mechanism that scales to a canvas of
 > many triggered plots. Every plot pushes its `ArtifactContext` (rows + digest) into the

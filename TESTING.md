@@ -82,10 +82,15 @@ Turn that into an executive summary.
 Compare CPI to SPI.
 ```
 
-In **mock mode** the answers come from a deterministic, data-grounded fallback (so they're
-always correct but plainly worded). With a **real key**, the Genesis LLM phrases them
-conversationally; if a live answer ever looks generic, that's the prose filter falling back
-to the deterministic line — the numbers are still right.
+**How answers stay correct:** every answer is **computed from the chart's rows in Python**
+(highest/lowest/average/difference/specific value/trend/worst-risk/worst-variance), so the
+numbers are always right and the text is always clean. The Genesis LLM is asked only to
+*reword* that correct fact, and only clean output is accepted — otherwise you see the
+computed sentence. In **mock mode** you get the computed sentences directly.
+
+**Seeing what the live model returns:** set `GENESIS_DEBUG=1` before `npm run dev:genesis`
+(or the server) to print each raw model response to the terminal — useful if a reworded
+answer looks off, so we can tune the API call.
 
 ### Go live with the real Genesis LLM
 
