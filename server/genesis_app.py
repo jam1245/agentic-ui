@@ -9,13 +9,13 @@ Run:
     pip install -r agent/requirements.txt
     # Offline (no key): the server auto-uses the mock client.
     python3 -m uvicorn server.genesis_app:app --port 8800
-    # Real Genesis:
-    export LLM_API_KEY=...  PM_ASSISTANT_ID=...
+    # Real Genesis (using completions API):
+    # Set in .env: LLM_API_KEY=... LLM_MODEL=openai/gpt-oss-120b
     python3 -m uvicorn server.genesis_app:app --port 8800
 
 Then `npm run dev:genesis` and open http://localhost:5173/genesis.html.
 
-Sessions are kept in memory keyed by session_id (one Genesis thread + artifact registry
+Sessions are kept in memory keyed by session_id (one client + artifact registry
 each). Swap for a real store in production so context survives restarts / scales.
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
-_USE_MOCK = os.getenv("GENESIS_MOCK") == "1" or not (os.getenv("LLM_API_KEY") and os.getenv("PM_ASSISTANT_ID"))
+_USE_MOCK = os.getenv("GENESIS_MOCK") == "1" or not os.getenv("LLM_API_KEY")
 
 
 def _make_client():
@@ -88,7 +88,6 @@ def chat(req: ChatRequest) -> dict:
         "text": result.text,
         "payloads": result.payloads,
         "artifacts": result.artifacts,
-        "context_used": result.context_used,
     }
 
 

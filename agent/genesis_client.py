@@ -1,15 +1,16 @@
-"""Client for the internal Genesis Assistants API (https://api.ai.us.lmco.com/v1).
+"""Client for the internal Genesis Completions API (https://api.ai.us.lmco.com/v1).
 
-Genesis is an OpenAI Assistants-style API: you create a thread, add messages, start a run
-against an assistant_id, poll for completion, then read the assistant's reply. This wraps
-that flow with two improvements over the one-shot script:
+Genesis uses a completions endpoint: you POST {"model": "...", "prompt": "..."} to
+/completions and get an immediate synchronous text response. This is simpler than the
+Assistants API (no threads/runs) but requires managing conversation context client-side.
 
-  * Thread REUSE — one thread per conversation, so the assistant retains context across
-    turns (needed for artifact-aware follow-ups like "why did March dip?").
+The agent loop (genesis_agent.py) builds context-aware prompts that include artifacts
+and prior turns, so the stateless completions API works for multi-turn conversations.
+
   * A drop-in MOCK client (`MockGenesisClient`) so the demos run end-to-end with no API
-    key — flip to the real client by setting LLM_API_KEY + PM_ASSISTANT_ID.
+    key — flip to the real client by setting LLM_API_KEY + LLM_MODEL.
 
-Both expose the same interface: `start_thread()` and `ask(prompt) -> str`.
+Both expose the same interface: `start_thread()` (no-op for completions) and `ask(prompt) -> str`.
 """
 from __future__ import annotations
 
@@ -31,82 +32,82 @@ DEFAULT_BASE_URL = "https://api.ai.us.lmco.com/v1"
 
 
 class GenesisClient:
-    """Thin, reusable client over the Genesis Assistants API."""
+    """Thin, reusable client over the Genesis Completions API."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        assistant_id: Optional[str] = None,
+        model: Optional[str] = None,
         base_url: Optional[str] = None,
         *,
-        poll_seconds: int = 60,
+        timeout: float = 30.0,
     ):
         self.api_key = api_key or os.getenv("LLM_API_KEY")
-        self.assistant_id = assistant_id or os.getenv("PM_ASSISTANT_ID")
+        self.model = model or os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
         self.base_url = (base_url or os.getenv("GENESIS_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
-        self.poll_seconds = poll_seconds
-        self.thread_id: Optional[str] = None
+        self.timeout = timeout
+        self.thread_id: Optional[str] = None  # kept for interface compatibility
         if not self.api_key:
             raise RuntimeError("LLM_API_KEY is not set (or pass api_key=). Use MockGenesisClient for offline demos.")
-        if not self.assistant_id:
-            raise RuntimeError("PM_ASSISTANT_ID is not set (or pass assistant_id=).")
+        
+        # Extract model name without provider prefix (openai/gpt-oss-120b -> gpt-oss-120b)
+        self.model_name = self.model.split('/')[-1]
 
     @property
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
     def start_thread(self) -> str:
-        """Create a fresh conversation thread and remember it for subsequent asks."""
-        resp = requests.post(f"{self.base_url}/threads", headers=self._headers, json={}, timeout=10)
-        resp.raise_for_status()
-        self.thread_id = resp.json()["id"]
+        """No-op for completions API (stateless). Kept for interface compatibility."""
+        self.thread_id = "completions-session"
         return self.thread_id
 
     def ask(self, prompt: str) -> str:
-        """Send one prompt on the current thread and return the assistant's text reply."""
+        """Send prompt to /completions endpoint and return the model's response.
+        
+        This is a single synchronous POST — no threads, runs, or polling.
+        The prompt should include all conversation context (managed by the agent loop).
+        """
         if self.thread_id is None:
             self.start_thread()
-
-        requests.post(
-            f"{self.base_url}/threads/{self.thread_id}/messages",
+        
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "max_tokens": 800,  # Enough for JSON, not excessive
+            "temperature": 0.3,  # Lower temp = more deterministic, less reasoning
+            "stop": ["\n\n{", "```\n{", "USER QUESTION:", "\n\nWe need", "\n\nThe user"],  # Stop reasoning patterns
+        }
+        
+        response = requests.post(
+            f"{self.base_url}/completions",
             headers=self._headers,
-            json={"role": "user", "content": prompt},
-            timeout=10,
-        ).raise_for_status()
-
-        run = requests.post(
-            f"{self.base_url}/threads/{self.thread_id}/runs",
-            headers=self._headers,
-            json={"assistant_id": self.assistant_id},
-            timeout=30,
+            json=payload,
+            timeout=self.timeout,
         )
-        run.raise_for_status()
-        run_id = run.json()["id"]
-
-        for _ in range(self.poll_seconds):
-            status = requests.get(
-                f"{self.base_url}/threads/{self.thread_id}/runs/{run_id}",
-                headers=self._headers,
-                timeout=10,
-            ).json()["status"]
-            if status == "completed":
-                break
-            if status in ("failed", "cancelled", "expired"):
-                raise RuntimeError(f"Genesis run {status}")
-            time.sleep(1)
-        else:
-            raise TimeoutError("Genesis run did not complete in time")
-
-        messages = requests.get(
-            f"{self.base_url}/threads/{self.thread_id}/messages",
-            headers=self._headers,
-            timeout=10,
-        ).json()["data"]
-        # Assistants API returns newest-first; take the latest assistant message.
-        for message in messages:
-            if message["role"] == "assistant":
-                return message["content"][0]["text"]["value"]
-        raise RuntimeError("No assistant response found")
+        
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Genesis completions request failed (status {response.status_code}): {response.text}"
+            )
+        
+        # Parse the OpenAI-style JSON response: {"choices": [{"text": "..."}], ...}
+        try:
+            response_data = response.json()
+            if "choices" in response_data and len(response_data["choices"]) > 0:
+                text = response_data["choices"][0]["text"]
+                
+                # Strip any reasoning/explanation before the JSON
+                # Look for the first { and take everything from there
+                json_start = text.find("{")
+                if json_start > 0:
+                    text = text[json_start:]
+                
+                return text
+            else:
+                raise RuntimeError(f"Unexpected response format: {response.text}")
+        except (KeyError, IndexError, ValueError) as e:
+            raise RuntimeError(f"Failed to parse completions response: {e}\nResponse: {response.text}")
 
 
 class MockGenesisClient:

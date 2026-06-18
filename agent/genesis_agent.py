@@ -58,25 +58,35 @@ get_cam_variance(program, period)         -> plan vs actual by CAM -> variance_t
 """
 
 SYSTEM_INSTRUCTION = f"""\
-You are a program-management analyst. Answer data questions by driving a UI, never by
-dumping numbers as text. Reply with EXACTLY ONE JSON object (no prose, no code fences)
-following this action protocol:
+You are a program-management analyst. Your ONLY job is to emit ONE valid JSON action.
 
-1) New data question -> choose a data tool AND the visualization:
-   {{"action":"fetch_data","tool":"<tool>","args":{{...}},
-     "then":{{"component":"line_chart|bar_chart|kpi_card|risk_matrix|variance_table|table|timeline|gantt|fishbone",
-              "title":"...","userIntent":"...","fields":{{"x":"..","y":"..","label":".."}},
-              "summary":"<=2 sentence takeaway","explanation":"why this component"}}}}
-2) Follow-up needing the rows of a prior chart:
-   {{"action":"get_artifact","artifactId":"<id from ARTIFACTS context>"}}
-3) Answer a follow-up from context (no new chart):
-   {{"action":"reply","text":"..."}}
+CRITICAL RULES:
+- Output ONLY JSON - NO explanations, NO reasoning, NO thinking, NO prose
+- Start your response immediately with {{
+- End after the closing }}
+- Do NOT explain your reasoning
+- Do NOT add text before or after the JSON
 
-Available data tools:
+ACTION PROTOCOL (pick ONE):
+
+1) Fetch data and show chart:
+{{"action":"fetch_data","tool":"<tool_name>","args":{{"program":"P-117"}},
+ "then":{{"component":"line_chart|bar_chart|kpi_card|risk_matrix|table","title":"...","userIntent":"trend_analysis|comparison|status_summary|distribution","fields":{{"x":"month","y":"cpi"}},"summary":"Brief takeaway","explanation":"Why this chart"}}}}
+
+2) Get artifact data for follow-up:
+{{"action":"get_artifact","artifactId":"<id from ARTIFACTS>"}}
+
+3) Text reply only (no chart):
+{{"action":"reply","text":"Your answer here"}}
+
+AVAILABLE TOOLS:
 {TOOL_CATALOG}
 
-Pick the component from the user's intent (trend->line_chart, compare->bar_chart,
-likelihood x impact->risk_matrix, headline metrics->kpi_card, plan vs actual->variance_table).
+VALID userIntent: trend_analysis, comparison, status_summary, distribution, ranking, schedule, root_cause, detail_lookup
+
+DEFAULT PROGRAM: Use "P-117" for program argument unless specified otherwise.
+
+REMEMBER: Output ONLY the JSON object. Start with {{ immediately.
 """
 
 
@@ -99,15 +109,44 @@ class TurnResult:
 
 
 def _extract_json(text: str) -> dict:
-    """Parse the model's reply into an action object, tolerating fences / stray prose."""
+    """Parse the model's reply into an action object, tolerating fences / stray prose.
+    
+    Finds the FIRST complete JSON object in the response, ignoring anything after it.
+    This handles cases where the model generates multiple JSON objects or extra text.
+    """
     text = (text or "").strip()
+    
+    # Try to extract from code fences first
     fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if fenced:
         text = fenced.group(1).strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start != -1 and end != -1:
-        text = text[start : end + 1]
-    return json.loads(text)
+    
+    # Find the first complete JSON object
+    start = text.find("{")
+    if start == -1:
+        raise json.JSONDecodeError("No JSON object found", text, 0)
+    
+    # Track braces to find the matching closing brace
+    depth = 0
+    end = start
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    
+    if depth != 0:
+        # Fallback to rfind if brace matching fails
+        end = text.rfind("}")
+    
+    if start != -1 and end != -1 and end > start:
+        json_str = text[start : end + 1]
+        return json.loads(json_str)
+    
+    raise json.JSONDecodeError("Could not extract valid JSON", text, 0)
 
 
 def _build_prompt(session: GenesisSession, user_question: str, injected: str = "") -> str:
@@ -149,7 +188,25 @@ def _payload_from_fetch(action: dict) -> tuple[AgentUIPayload, str, str]:
         raw_payload["columns"] = spec["columns"]
     if "problem" in spec:
         raw_payload["problem"] = spec["problem"]
-    payload = _adapter.validate_python(raw_payload)
+    
+    # Validate and fall back to table on validation errors
+    try:
+        payload = _adapter.validate_python(raw_payload)
+    except Exception as e:
+        # Fall back to a simple table if validation fails
+        raw_payload = {
+            "component": "table",
+            "title": spec.get("title", "Results"),
+            "data": result.get("rows", []),
+            "fields": {},
+            "metadata": {
+                "source": result.get("source", "Genesis"),
+                "explanation": f"Validation failed ({e}), showing as table.",
+                "filtersApplied": result.get("filters"),
+            },
+        }
+        payload = _adapter.validate_python(raw_payload)
+    
     return payload, spec.get("summary", spec.get("explanation", "")), f"{tool_name}"
 
 
