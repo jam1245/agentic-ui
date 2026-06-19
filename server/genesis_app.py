@@ -43,6 +43,12 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # ADK isn't importable. Otherwise use the real ADK + Genesis agent.
 _USE_MOCK = os.getenv("GENESIS_MOCK") == "1" or not os.getenv("LLM_API_KEY")
 _MODE = "mock"
+_ADK_ERROR: str | None = None
+_WHY_MOCK = (
+    "GENESIS_MOCK=1" if os.getenv("GENESIS_MOCK") == "1"
+    else "LLM_API_KEY not set" if not os.getenv("LLM_API_KEY")
+    else None
+)
 
 if not _USE_MOCK:
     try:
@@ -50,8 +56,23 @@ if not _USE_MOCK:
 
         _MODE = "adk"
     except Exception as exc:  # noqa: BLE001
-        print(f"[backend] ADK unavailable ({exc}); falling back to deterministic engine.")
+        import traceback
+        _ADK_ERROR = f"{type(exc).__name__}: {exc}"
+        _WHY_MOCK = f"ADK failed to import — {_ADK_ERROR}"
         _USE_MOCK = True
+        print("\n" + "=" * 78)
+        print("[backend] ⚠  ADK agent could NOT load — falling back to the DETERMINISTIC engine.")
+        print("[backend]    Answers will be curt/computed, not LLM-reasoned. Likely fix:")
+        print("[backend]    pip install -r agent/requirements.txt   (installs google-adk + litellm)")
+        print(f"[backend]    error: {_ADK_ERROR}")
+        traceback.print_exc()
+        print("=" * 78 + "\n")
+
+# Loud, unambiguous startup banner so you always know which engine is answering.
+print("\n" + "─" * 78)
+print(f"[backend] ENGINE = {_MODE.upper()}" + (f"  (reason: {_WHY_MOCK})" if _USE_MOCK else "  (Google ADK + Genesis LLM)"))
+print(f"[backend] check any time:  curl http://localhost:8800/api/health")
+print("─" * 78 + "\n")
 
 if _USE_MOCK:
     from agent.genesis_agent import GenesisSession, run_turn as _det_run_turn  # noqa: E402
@@ -76,7 +97,9 @@ class ChatRequest(BaseModel):
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "mode": _MODE}
+    # `mode` is "adk" (real Google ADK + Genesis) or "mock" (deterministic, no LLM).
+    # If you expected "adk" but see "mock", read `why` / `adk_error`.
+    return {"ok": True, "mode": _MODE, "why": _WHY_MOCK, "adk_error": _ADK_ERROR}
 
 
 @app.post("/api/chat")

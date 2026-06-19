@@ -43,6 +43,10 @@ class ArtifactContext(BaseModel):
     assumptions: Optional[list[str]] = None
     agentInterpretation: str = ""
     summaryForFutureTurns: str = ""
+    # The durable SEMANTIC model of the artifact: per-metric value/status/meaning + an
+    # overall interpretation + likely drivers. This is what lets the chat reason like an
+    # analyst instead of echoing values. Shape: {artifact, metrics, interpretation, likely_drivers}.
+    analysis: Optional[dict[str, Any]] = None
     createdAt: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -71,9 +75,17 @@ def to_artifact_context(
     source_system: Optional[str] = None,
     data_ref: Optional[str] = None,
     assumptions: Optional[list[str]] = None,
+    analysis: Optional[dict] = None,
 ) -> ArtifactContext:
-    """Normalize a rendering payload + agent knowledge into an ArtifactContext."""
+    """Normalize a rendering payload + agent knowledge into an ArtifactContext.
+
+    If `analysis` isn't supplied, derive it from the semantic model so every artifact carries
+    its meaning (status/thresholds/interpretation/drivers), not just its values."""
     data = payload.data
+    fields = payload.fields.model_dump(exclude_none=True) if getattr(payload, "fields", None) else {}
+    if analysis is None:
+        from .tools import semantics
+        analysis = semantics.build_analysis(payload.component, fields, data, payload.title)
     return ArtifactContext(
         artifactId=payload.artifactId or _new_id(payload.component),
         artifactType=payload.component,
@@ -84,11 +96,12 @@ def to_artifact_context(
         dataRef=data_ref,
         dataSample=data[:SAMPLE_SIZE],
         fullData=data,
-        fields=payload.fields.model_dump(exclude_none=True) if getattr(payload, "fields", None) else {},
+        fields=fields,
         filtersApplied=payload.metadata.filtersApplied,
         assumptions=assumptions,
         agentInterpretation=payload.metadata.explanation or summary_for_future_turns,
         summaryForFutureTurns=summary_for_future_turns,
+        analysis=analysis,
     )
 
 

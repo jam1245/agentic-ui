@@ -393,11 +393,20 @@ def _digests(session: GenesisSession) -> list[dict]:
 # --------------------------------------------------------------------------------------
 
 def _answer_about_data(client, session: GenesisSession, question: str, art: ArtifactContext) -> TurnResult:
-    """Answer a question about a plotted chart. The LLM converses with the data in context
-    (so it can plan, summarize for a director, judge what's concerning); if its output is
-    unusable — or we're offline — we fall back to a deterministic, data-grounded answer."""
+    """Answer a question about a plotted chart. Order of preference:
+    1) the LLM converses (with data in context) — analyst-grade, when available;
+    2) for interpretive questions ("is that good or bad", "what does this mean") a semantic
+       interpretation (thresholds + meaning + drivers + action) — so even offline it reasons;
+    3) a deterministic value computation as the last resort.
+    """
+    from .tools import semantics
+
     rows = art.fullData or []
-    answer = _converse(client, session, question, art) or _analyze(question, art, rows)
+    answer = _converse(client, session, question, art)
+    if not answer and semantics.is_interpretive(question):
+        answer = semantics.interpret(question, art.fields or {}, art.artifactType, rows, art.title)
+    if not answer:
+        answer = _analyze(question, art, rows)
     return TurnResult(
         answer, [], _digests(session),
         [{"artifactId": art.artifactId, "title": art.title}],

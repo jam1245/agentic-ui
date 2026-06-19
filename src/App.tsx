@@ -9,11 +9,34 @@
  * Run `npm run dev:genesis` (chat works offline via the mock backend; add a Genesis key
  * to go live). `npm run dev` serves the page too, but the chat needs the backend.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AgentUIRenderer } from "./components/AgentUIRenderer";
 import { ALL_EXAMPLES } from "./examples/payloads";
 import { useGenesisChat } from "./genesis/useGenesisChat";
 import "./styles.css";
+
+interface Health { mode?: string; why?: string | null; adk_error?: string | null }
+
+function ModeBadge() {
+  const [h, setH] = useState<Health | null>(null);
+  useEffect(() => {
+    fetch("/api/health").then((r) => r.json()).then(setH).catch(() => setH({ mode: "?" }));
+  }, []);
+  if (!h) return null;
+  const adk = h.mode === "adk";
+  return (
+    <span
+      title={adk ? "Google ADK + Genesis LLM" : `Deterministic engine — ${h.why || "no LLM"}${h.adk_error ? `\n${h.adk_error}` : ""}`}
+      style={{
+        fontSize: 12, fontWeight: 600, padding: "2px 10px", borderRadius: 999,
+        background: adk ? "#dcfce7" : "#fef9c3", color: adk ? "#166534" : "#854d0e",
+        border: `1px solid ${adk ? "#86efac" : "#fde047"}`,
+      }}
+    >
+      {adk ? "● ADK + Genesis (LLM)" : "● Deterministic engine (no LLM)"}
+    </span>
+  );
+}
 
 const SUGGESTIONS = [
   "Show CPI trend for the last six months.",
@@ -38,7 +61,10 @@ export default function App() {
   return (
     <main className="landing">
       <header className="landing-head">
-        <h1>Agent-driven UI — program analyst</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <h1 style={{ margin: 0 }}>Agent-driven UI — program analyst</h1>
+          <ModeBadge />
+        </div>
         <p>
           Your internal <strong>Genesis</strong> LLM turns questions into charts, and remembers the data behind them
           so follow-ups just work. Try a chip, then ask <em>"why did March dip?"</em>

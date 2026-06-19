@@ -37,6 +37,17 @@ def _canvas_block(state) -> str:
             f'- [{a.get("artifactId")}] "{a.get("title")}" ({a.get("artifactType")}) — '
             f"{summary} | fields: {fstr} | rows: {len(rows)} | sample: {sample}"
         )
+        # The semantic model (status/meaning/interpretation) so the agent reasons, not echoes.
+        analysis = a.get("analysis") or {}
+        metrics = analysis.get("metrics") or {}
+        if metrics:
+            mstr = "; ".join(
+                f"{k}: {v.get('value', v.get('score'))} [{v.get('status')}] {v.get('meaning','')}".strip()
+                for k, v in list(metrics.items())[:6]
+            )
+            lines.append(f"    · meaning: {mstr}")
+        if analysis.get("interpretation"):
+            lines.append(f"    · interpretation: {analysis['interpretation'][:240]}")
 
     return (
         "CHARTS CURRENTLY ON SCREEN (the user can see these):\n"
