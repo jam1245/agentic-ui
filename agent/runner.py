@@ -39,14 +39,21 @@ def _ensure_session(session_id: str):
 
 def run_turn(session_id: str, user_message: str) -> dict:
     _ensure_session(session_id)
-
+ 
     # Reset per-turn staging and record the question (render_chart uses it for the artifact).
-    state_delta = {PENDING_KEY: [], CONTEXT_USED_KEY: [], "last_user_message": user_message}
+    # Directly mutate session state (ADK 1.26+ - state changes persist automatically)
+    session = _session_service.get_session_sync(app_name=APP_NAME, user_id=USER_ID, session_id=session_id)
+    if session:
+        session.state[PENDING_KEY] = []
+        session.state[CONTEXT_USED_KEY] = []
+        session.state["last_user_message"] = user_message
+        # No update call needed - session.state changes are persisted automatically in ADK 1.26
+    
     new_message = types.Content(role="user", parts=[types.Part(text=user_message)])
-
+ 
     final_text = ""
     for event in _runner.run(
-        user_id=USER_ID, session_id=session_id, new_message=new_message, state_delta=state_delta
+        user_id=USER_ID, session_id=session_id, new_message=new_message  # ← removed state_delta
     ):
         if event.is_final_response() and event.content and event.content.parts:
             final_text = "".join(p.text or "" for p in event.content.parts).strip()

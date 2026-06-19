@@ -69,10 +69,10 @@ if not _USE_MOCK:
         print("=" * 78 + "\n")
 
 # Loud, unambiguous startup banner so you always know which engine is answering.
-print("\n" + "─" * 78)
+print("\n" + "-" * 78)
 print(f"[backend] ENGINE = {_MODE.upper()}" + (f"  (reason: {_WHY_MOCK})" if _USE_MOCK else "  (Google ADK + Genesis LLM)"))
 print(f"[backend] check any time:  curl http://localhost:8800/api/health")
-print("─" * 78 + "\n")
+print("-" * 78 + "\n")
 
 if _USE_MOCK:
     from agent.genesis_agent import GenesisSession, run_turn as _det_run_turn  # noqa: E402
