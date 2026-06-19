@@ -72,6 +72,11 @@ def call_assistant_v2(assistant_id: str, message: str) -> dict:
     if not assistant_id:
         return {"status": "error", "error": "No assistant_id provided"}
 
+    debug = os.getenv("GENESIS_DEBUG") == "1"
+    if debug:
+        import sys
+        print(f"[assistant→] id={assistant_id} base={cfg['api_base']} q={message[:80]!r}", file=sys.stderr)
+
     payload = {"assistant_id": assistant_id, "thread": {"messages": [{"role": "user", "content": message}]}, "stream": True}
     try:
         resp = requests.post(
@@ -83,13 +88,23 @@ def call_assistant_v2(assistant_id: str, message: str) -> dict:
             timeout=30,
         )
         if resp.status_code == 501:
+            if debug:
+                import sys
+                print(f"[assistant✗] 501 Not Implemented — Assistants API unavailable; returning mock.", file=sys.stderr)
             return {"status": "completed", "response": f"[Mock response for assistant {assistant_id}]"}
         resp.raise_for_status()
     except Exception as exc:  # noqa: BLE001
+        if debug:
+            import sys
+            print(f"[assistant✗] error: {exc}", file=sys.stderr)
         return {"status": "error", "error": str(exc)}
 
     try:
-        return {"status": "completed", "response": _parse_sse(resp) or ""}
+        reply = _parse_sse(resp) or ""
+        if debug:
+            import sys
+            print(f"[assistant←] {len(reply)} chars: {reply[:160]!r}", file=sys.stderr)
+        return {"status": "completed", "response": reply}
     except Exception as exc:  # noqa: BLE001
         return {"status": "error", "error": f"Failed to parse stream: {exc}"}
 
