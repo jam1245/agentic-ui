@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from google.adk.agents import LlmAgent
 
+from .._context import with_canvas
 from ...config.model_config import get_model
 from ...tools import data_tools
 from ...tools.artifact_tools import get_artifact_data, list_artifacts
@@ -53,7 +54,7 @@ root_agent = LlmAgent(
     name="program_analyst",
     model=get_model(),
     description="Answers program-management questions and drives charts/dashboards from program data.",
-    instruction=INSTRUCTION,
+    instruction=with_canvas(INSTRUCTION),
     tools=[
         data_tools.get_cpi_trend,
         data_tools.get_spi_by_control_account,

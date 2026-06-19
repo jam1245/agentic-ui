@@ -174,7 +174,16 @@ for production, persist server-side so context survives restarts / scales across
 ## Free-form questions about plotted data (and the canvas direction)
 
 A rendered chart isn't just answerable by canned follow-ups — the chat reasons over the
-chart's **actual rows**. `run_turn` ([`agent/genesis_agent.py`](../agent/genesis_agent.py))
+chart's **actual rows**.
+
+> **On the ADK path (with a key):** the agent is **automatically aware of every chart on
+> screen** — a live digest of the whole canvas (titles, summaries, schemas, samples, ids) is
+> injected into its instruction each turn, and it pulls full rows on demand
+> (`get_artifact_data`) to reason and **connect across charts**. See
+> [12-adk-architecture.md → Canvas awareness](12-adk-architecture.md#canvas-awareness-the-chat-always-knows-whats-on-screen).
+> The rest of this section describes the **deterministic offline engine** (mock path).
+
+The deterministic engine `run_turn` ([`agent/genesis_agent.py`](../agent/genesis_agent.py))
 routes each message:
 
 - **a chart request** ("show CPI trend") → plot it + store the artifact;

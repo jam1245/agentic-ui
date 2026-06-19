@@ -59,6 +59,26 @@ React (App.tsx) ── POST /api/chat ──► server/genesis_app.py ──► 
   rows and answer questions about them (drives the 🧠 badge); ADK's native loop lets the LLM
   genuinely reason and converse.
 
+## Canvas awareness (the chat always knows what's on screen)
+
+Each agent's `instruction` is a **provider** (`agent/adk_agents/_context.py`,
+`with_canvas(...)`) — ADK supports `instruction: (ReadonlyContext) -> str`. Every turn it
+appends a compact, live summary of **all charts currently rendered** (title, type, takeaway,
+field schema, row count, a one-row sample, and the `artifactId`), read from the artifact
+registry in session state:
+
+```
+CHARTS CURRENTLY ON SCREEN (the user can see these):
+- [artifact_line_chart_…] "CPI Trend — Last 6 Months" (line_chart) — CPI dipped to 0.90 in March… | fields: x=month, y=cpi | rows: 6 | sample: [{"month":"Jan","cpi":0.92}]
+- [artifact_risk_matrix_…] "Top Program Risks" (risk_matrix) — Supplier delay (4×5)… | fields: x=likelihood, y=impact, label=risk | rows: 4 | sample: [...]
+```
+
+So the LLM **always knows the whole canvas** without having to ask, and is instructed to
+pull full rows on demand (`get_artifact_data`) and **make connections across charts** (relate
+a cost trend to a risk, a schedule slip to program health). Full datasets stay OUT of the
+prompt (cheap); only the digests are injected — awareness is guaranteed, token cost stays
+low.
+
 ## Two execution paths (same response shape)
 
 | Path | When | Engine |

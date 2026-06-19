@@ -11,6 +11,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from ...config.model_config import get_model
+from .._context import with_canvas
 from ..cam_agent.agent import cam_agent
 from ..pm_agent.agent import pm_agent
 from ..rcca_agent.agent import rcca_agent
@@ -32,14 +33,17 @@ Routing:
 - Match the most specific specialist first (cam / risk / rcca own well-defined domains).
 - For a multi-domain request, route to the agent that owns the PRIMARY topic.
 - When in doubt or for general/program-level questions, route to pm_agent.
-- Follow-up questions about a chart already shown go to the SAME specialist that showed it.
+- Follow-up questions about a chart already shown go to the SAME specialist that showed it
+  (see "CHARTS CURRENTLY ON SCREEN" below to know which specialist owns which chart).
+- For a question that spans charts from different domains (e.g., relate cost to risk), route
+  to the specialist that owns the PRIMARY chart; it can read the others from shared context.
 """
 
 orchestrator = LlmAgent(
     name="orchestrator",
     model=get_model(),  # LiteLlm → internal Genesis (no Google cloud)
     description="Routes program-management requests to CAM, Risk, RCCA, or PM specialists.",
-    instruction=INSTRUCTION,
+    instruction=with_canvas(INSTRUCTION),
     sub_agents=[pm_agent, cam_agent, risk_agent, rcca_agent],
 )
 

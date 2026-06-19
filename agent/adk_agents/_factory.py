@@ -16,6 +16,7 @@ from typing import Callable, Optional
 
 from google.adk.agents import LlmAgent
 
+from ._context import with_canvas
 from ..config.model_config import get_model
 from ..tools import data_tools
 from ..tools.artifact_tools import get_artifact_data, list_artifacts
@@ -51,7 +52,8 @@ def make_specialist(
         name=name,
         model=get_model(),
         description=description,
-        instruction=instruction,
+        # Dynamic instruction: the base guidance + the live canvas summary, every turn.
+        instruction=with_canvas(instruction),
         tools=tools,
     )
 
@@ -62,8 +64,10 @@ COMMON_RULES = """
 How you work:
 - To SHOW data, call render_chart (it pulls authoritative rows from a data tool — never
   invent numbers). Then give ONE sentence of insight; don't re-list what the chart shows.
-- For a QUESTION about a chart you already showed, call get_artifact_data (use
-  list_artifacts if unsure which) and answer conversationally with the real numbers.
+- For a QUESTION about a chart, you ALREADY KNOW what's on screen (see "CHARTS CURRENTLY ON
+  SCREEN" below). Call get_artifact_data(artifactId) to pull a chart's full rows, then answer
+  conversationally with real numbers. For broader questions, reason ACROSS multiple charts
+  and connect them (e.g., relate cost performance to risk or schedule).
 - For deep domain expertise or guidance, consult your specialist assistant tool.
 - You OWN this domain. Only defer to another agent if the request is clearly outside it.
 - Use program "P-117" unless the user specifies otherwise.
