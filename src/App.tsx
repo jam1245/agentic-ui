@@ -15,6 +15,49 @@ import { ALL_EXAMPLES } from "./examples/payloads";
 import { useGenesisChat } from "./genesis/useGenesisChat";
 import "./styles.css";
 
+/**
+ * Minimal, SAFE Markdown → HTML for assistant bubbles. HTML is escaped FIRST, so the only
+ * tags in the output are the ones we add (strong/em/code/ul/ol/li/p) — no XSS from model
+ * output. Handles what the agent emits: **bold**, *italic*, `code`, bullet/numbered lists,
+ * and paragraphs. Intentionally ignores tables/headings/raw HTML.
+ */
+function renderMarkdown(src: string): string {
+  const esc = (t: string) =>
+    t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (t: string) =>
+    esc(t)
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  const out: string[] = [];
+  let list: { type: "ul" | "ol"; items: string[] } | null = null;
+  const flush = () => {
+    if (list) {
+      out.push(`<${list.type}>${list.items.map((i) => `<li>${i}</li>`).join("")}</${list.type}>`);
+      list = null;
+    }
+  };
+  for (const raw of src.split("\n")) {
+    const line = raw.trim();
+    if (!line) { flush(); continue; }
+    const bullet = line.match(/^[-*]\s+(.*)/);
+    const ordered = line.match(/^\d+[.)]\s+(.*)/);
+    if (bullet) {
+      if (!list || list.type !== "ul") { flush(); list = { type: "ul", items: [] }; }
+      list.items.push(inline(bullet[1]));
+    } else if (ordered) {
+      if (!list || list.type !== "ol") { flush(); list = { type: "ol", items: [] }; }
+      list.items.push(inline(ordered[1]));
+    } else {
+      flush();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  flush();
+  return out.join("");
+}
+
 interface Health { mode?: string; why?: string | null; adk_error?: string | null }
 
 function ModeBadge() {
@@ -94,7 +137,12 @@ export default function App() {
                     🧠 used context: {turn.contextUsed.map((c) => c.title).join(", ")}
                   </div>
                 )}
-                {turn.text && <div className="bubble-text">{turn.text}</div>}
+                {turn.text &&
+                  (turn.role === "assistant" ? (
+                    <div className="bubble-text" dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.text) }} />
+                  ) : (
+                    <div className="bubble-text">{turn.text}</div>
+                  ))}
                 {turn.payloads?.map((p, j) => (
                   <AgentUIRenderer key={j} raw={p} />
                 ))}

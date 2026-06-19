@@ -88,7 +88,12 @@
 .bubble--user { align-items: flex-end; }
 .bubble-role { font-size: 11px; color: var(--agui-muted); }
 .bubble--user .bubble-text { background: #2563eb; color: #fff; border-radius: 12px 12px 2px 12px; padding: 8px 12px; font-size: 14px; max-width: 80%; }
-.bubble--assistant .bubble-text { background: #f1f5f9; border-radius: 12px 12px 12px 2px; padding: 8px 12px; font-size: 14px; }
+.bubble--assistant .bubble-text { background: #f1f5f9; border-radius: 12px 12px 12px 2px; padding: 8px 12px; font-size: 14px; line-height: 1.5; }
+.bubble--assistant .bubble-text p { margin: 0 0 8px; }
+.bubble--assistant .bubble-text p:last-child { margin-bottom: 0; }
+.bubble--assistant .bubble-text ul, .bubble--assistant .bubble-text ol { margin: 4px 0 8px; padding-left: 20px; }
+.bubble--assistant .bubble-text li { margin: 2px 0; }
+.bubble--assistant .bubble-text code { background: #e2e8f0; border-radius: 4px; padding: 0 4px; font-size: 13px; }
 .ctx-badge { align-self: flex-start; background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; border-radius: 6px; font-size: 11px; padding: 2px 8px; }
 .chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--agui-border); }
 .chat-input input { flex: 1; padding: 8px 12px; border: 1px solid var(--agui-border); border-radius: 8px; font-size: 14px; }
