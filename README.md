@@ -16,10 +16,11 @@ Genesis is the brain. See [docs/12-adk-architecture.md](docs/12-adk-architecture
 > contract**.
 >
 > **The other half:** every rendered chart also becomes a **first-class conversational
-> artifact**. The same render produces an `ArtifactContext` stored in session state, so the
-> chat agent can answer follow-ups — *"why did March dip?"*, *"summarize that for
-> leadership"*, *"compare this to SPI"* — about what it showed. See
-> [docs/09](docs/09-artifact-aware-context.md).
+> artifact** with a **semantic model** — per-metric status, plain-language meaning, and
+> likely drivers (not just values). So the agent *interprets* like an analyst ("CPI is below
+> the 1.0 plan line — cost efficiency is unfavorable; likely drivers are…") and answers
+> follow-ups — *"why did March dip?"*, *"is that good or bad?"*, *"summarize for leadership"*.
+> See [docs/09](docs/09-artifact-aware-context.md).
 
 Run one command and you get a **live page**: a Genesis-powered chat on the left that really
 plots, and an "under the hood" panel on the right showing the data being **absorbed into

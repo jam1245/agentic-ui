@@ -102,8 +102,27 @@ lines if a live answer looks off and we'll tune from there.
 npm run dev:genesis        # /api/health now reports mode:"adk" (Google ADK + Genesis)
 ```
 
-The key stays server-side (in the Python backend), never in the browser. Details:
-[docs/10-genesis-internal-llm.md](docs/10-genesis-internal-llm.md).
+**Confirm which engine is running** — the page shows a badge (green **ADK + Genesis (LLM)**
+vs amber **Deterministic (no LLM)**), the terminal prints an `ENGINE = …` banner on startup,
+and `curl http://localhost:8800/api/health` returns `{"mode": "...", "why": ...}`. If you
+expected `adk` but see `mock`, `why`/`adk_error` says exactly why (key not set,
+`GENESIS_MOCK=1`, or `google-adk` not installed). The key stays server-side, never in the
+browser. Architecture: [docs/12-adk-architecture.md](docs/12-adk-architecture.md).
+
+### Test the Genesis specialist assistants
+
+The ADK sub-agents (CAM/Risk/PM/RCCA) consult your pre-built Genesis assistants for
+interpretation. After setting the `*_ASSISTANT_ID` values in `.env`, test them in isolation:
+
+```bash
+python scripts/test_assistants.py    # calls each assistant directly, prints status + reply
+```
+- ✅ real text → wired and answering.
+- ⚠ `[Mock response …]` → the gateway returned 501 (Assistants API not enabled for your key).
+- ✗ error → bad id / auth / SSL / network (message says which).
+
+To watch the calls during a chat, run with `GENESIS_DEBUG=1` and look for `[assistant→]` /
+`[assistant←]` lines in the terminal.
 
 ---
 

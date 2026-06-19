@@ -99,6 +99,35 @@ from the digest; rows recoverable on demand).
 > Rule of thumb: **summary in the prompt, data on demand.** If you find yourself pasting
 > hundreds of rows into context, store a `dataRef` instead and rehydrate.
 
+## The analysis context object (semantic model)
+
+Data + a one-line summary isn't enough — given only values, an LLM tends to *echo* them
+("CPI 0.94, SPI 1.02…") instead of reasoning. So every artifact also carries a **semantic
+model**: per-metric status + plain-language meaning, an overall interpretation, and likely
+drivers. This is what lets the chat answer "is that good or bad?" like an analyst.
+
+```jsonc
+// artifact.analysis  (built by agent/tools/semantics.py at render time)
+{
+  "artifact": "Program Health Summary",
+  "metrics": {
+    "CPI": {"value": 0.94, "status": "critical", "meaning": "cost efficiency below the 1.0 plan line"},
+    "SPI": {"value": 1.02, "status": "good",     "meaning": "schedule efficiency at/above plan"},
+    "EAC Variance": {"value": "-$1.2M", "status": "critical", "meaning": "projected cost overrun"}
+  },
+  "interpretation": "Schedule is stable, but cost and risk posture are the concern…",
+  "likely_drivers": ["supplier delay", "staffing gap", "late requirements baseline"]
+}
+```
+
+[`agent/tools/semantics.py`](../agent/tools/semantics.py) holds the program-management
+thresholds (CPI/SPI vs 1.0, negative EAC = overrun, risk = likelihood × impact) and builds
+this object. It's stored on the `ArtifactContext` and **injected into the agent's canvas
+digest each turn** ([12 → Canvas awareness](12-adk-architecture.md#canvas-awareness-the-chat-always-knows-whats-on-screen)),
+so the model reasons against meaning, not just numbers. On the ADK path the agent layers in
+expert judgment by consulting its Genesis specialist assistant; the deterministic engine
+uses this same semantic model to interpret offline.
+
 ## Implementation per stack layer
 
 ### MCP / tools — data **plus** light semantic metadata

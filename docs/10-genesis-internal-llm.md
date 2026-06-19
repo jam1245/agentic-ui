@@ -186,20 +186,14 @@ payload that fails validation degrades to a table ([08](08-validation-and-fallba
   in session state; follow-ups read the compact digests and rehydrate full rows on demand.
   Exactly the behavior proven in [09-artifact-aware-context.md](09-artifact-aware-context.md).
 
-## Transport: now vs. later
+## Where this fits
 
-Genesis is the only LLM backend here, reached over a simple HTTP transport. If you later
-adopt CopilotKit/AG-UI, only the transport changes — the contracts and renderers don't:
-
-| | This repo (HTTP) | If you adopt CopilotKit/AG-UI |
-| --- | --- | --- |
-| LLM | **internal Genesis Completions API** | **internal Genesis** (unchanged) |
-| Transport | `POST /api/chat` → FastAPI | AG-UI events via self-hosted `@copilotkit/runtime` |
-| Frontend glue | `useGenesisChat` + `<AgentUIRenderer>` | `useCopilotAction("render_ui")` + same renderer |
-| Contracts / renderers | **identical** | **identical** |
-
-See [04-frontend-integration.md](04-frontend-integration.md) for the optional CopilotKit
-wiring. No Google key in either case.
+This page documents the **deterministic offline engine** (the mock path). The **primary**
+path is the Google ADK agent on Genesis via LiteLLM — see
+[12-adk-architecture.md](12-adk-architecture.md). Both reach Genesis with no Google key,
+and both produce the same `{text, payloads, artifacts}` over `POST /api/chat`, so React and
+the contracts are identical. If you later adopt CopilotKit/AG-UI, only the transport changes
+(see [04-frontend-integration.md](04-frontend-integration.md)); Genesis stays the LLM.
 
 ## Production notes
 
