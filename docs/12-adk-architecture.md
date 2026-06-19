@@ -28,25 +28,23 @@ pattern in the companion `adk-project`.)
 ## The pieces
 
 ```
-React (App.tsx) ── POST /api/chat ──► server/genesis_app.py
-                                          │
-                                   agent/runner.py  (ADK Runner)
-                                          │
-                        agent/adk_agents/program_analyst/agent.py
-                        root_agent = LlmAgent(model=get_model(), tools=[…])
-                                          │  ADK tool-calling loop (on Genesis via LiteLLM)
-        ┌─────────────────────────────────┼───────────────────────────────────┐
-        ▼                                  ▼                                    ▼
-  data tools (rows)              render_chart(...)                    list/get_artifact_data
-  agent/tools/data_tools.py      agent/tools/render_tools.py          agent/tools/artifact_tools.py
-                                  builds+validates AgentUIPayload,
-                                  stages it into ADK session state
+React (App.tsx) ── POST /api/chat ──► server/genesis_app.py ──► agent/runner.py (ADK Runner)
+                                                                       │
+                                            orchestrator (root_agent) routes via sub_agents
+                                                                       │
+                                       the chosen specialist (cam / risk / pm / rcca)
+                                                                       │  ADK tool-calling (Genesis via LiteLLM)
+        ┌──────────────────┬──────────────────────┬────────────────────────┬──────────────────────┐
+        ▼                  ▼                      ▼                        ▼                      ▼
+  data tools (rows)  render_chart(...)    get_artifact_data       call_*_assistant_v2     render_structured
+                     builds+validates AgentUIPayload,             (Genesis specialist     (qualitative views,
+                     stages into ADK session state                assistant)              e.g. fishbone)
                                           │
                 runner reads staged payloads/artifacts from session state
                 ──► { text, payloads, artifacts, context_used } ──► React renderers
 ```
 
-- **`LlmAgent` (the lead agent)** — `agent/adk_agents/program_analyst/agent.py`. Brained by
+- **`LlmAgent` (a lead/specialist agent)** — e.g. `agent/adk_agents/program_analyst/agent.py`. Brained by
   Genesis; given the data tools, `render_chart`, and the artifact-recall tools.
 - **`render_chart` (the data→UI bridge)** — `agent/tools/render_tools.py`. An ADK function
   tool that takes `tool_context: ToolContext`, fetches authoritative rows from a data tool
@@ -71,18 +69,32 @@ React (App.tsx) ── POST /api/chat ──► server/genesis_app.py
 Both return `{ text, payloads, artifacts, context_used }`, so the UI is identical. The
 deterministic engine is the **offline fallback**, not the primary path.
 
-## Plug-and-play, going forward (Phase 2+)
+## Orchestrator + specialist sub-agents (Phase 2 — built)
 
-The ADK framework is what makes this extensible:
+The default `root_agent` is now an **orchestrator** that routes each request to a specialist
+sub-agent via ADK's native `sub_agents` delegation. `agent/runner.py` runs it.
 
-- **Genesis specialist assistants as tools** — `agent/tools/external_assistant_tool.py`
-  (`call_cam_assistant_v2`, `call_pm_assistant_v2`, …) wraps the Genesis Assistants API so a
-  sub-agent can consult a pre-built domain expert.
-- **Orchestrator + `sub_agents`** — an `LlmAgent(sub_agents=[…])` routes each request to the
-  right specialist (CAM, RIO/Risk, PM, RCCA), each able to fetch data, render charts, and
-  consult its Genesis assistant. New agents/subagents drop in without touching the contract
-  or the React layer.
+```
+orchestrator  (agent/adk_agents/orchestrator/agent.py)
+  ├─ pm_agent    — program health, status, executive summaries, schedule  (call_pm_assistant_v2)   [default host]
+  ├─ cam_agent   — EVM: CPI, SPI, cost/schedule variance, CAM variance     (call_cam_assistant_v2)
+  ├─ risk_agent  — risk matrix, likelihood × impact, mitigation            (call_risk_assistant_v2)
+  └─ rcca_agent  — root cause & corrective action, fishbone                (call_rcca_assistant_v2)
+```
 
-This mirrors the `adk-project` orchestrator pattern; see [05-backend-and-data-tools.md](05-backend-and-data-tools.md).
+Each specialist is an `LlmAgent` (Genesis via LiteLLM) that can fetch its domain data,
+**render charts** (`render_chart`, plus `render_structured` for qualitative views like a
+fishbone), answer follow-ups (`get_artifact_data`), and **consult its pre-built Genesis
+specialist assistant** through `agent/tools/external_assistant_tool.py`
+(`call_*_assistant_v2`, which speaks the Genesis Assistants API). Because every sub-agent
+writes to the same ADK session state, the `render_chart` → session-state → runner bridge
+works no matter which agent handles the turn — React is unchanged.
+
+**Plug and play:** add a specialist with one thin `agent.py` that calls
+`make_specialist(...)` ([`_factory.py`](../agent/adk_agents/_factory.py)) and list it in the
+orchestrator's `sub_agents`. Set the per-assistant ids in `.env`
+(`CAM_ASSISTANT_ID`, `PM_ASSISTANT_ID`, `RISK_ASSISTANT_ID`, `RCCA_ASSISTANT_ID`).
+
+This mirrors the `adk-project` orchestrator pattern.
 
 ← back to the [README](../README.md)

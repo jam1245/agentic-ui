@@ -17,12 +17,14 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from .adk_agents.program_analyst.agent import root_agent
+# The orchestrator routes to specialist sub-agents (CAM, Risk, PM, RCCA). To run the single
+# general agent instead, import from .adk_agents.program_analyst.agent.
+from .adk_agents.orchestrator.agent import root_agent
 from .artifacts import to_digest, ArtifactContext
 from .tools.artifact_tools import ARTIFACTS_KEY, CONTEXT_USED_KEY
 from .tools.render_tools import PENDING_KEY
 
-APP_NAME = "program_analyst"
+APP_NAME = "program_workbench"
 USER_ID = "web"
 
 _session_service = InMemorySessionService()

@@ -97,11 +97,58 @@ def render_chart(
         raw["columns"] = columns
     if problem:
         raw["problem"] = problem
+    return _stage(raw, summary, source_tool, tool_context)
 
+
+def render_structured(
+    component: str,
+    title: str,
+    data: list,
+    fields: dict,
+    summary: str,
+    tool_context: ToolContext,
+    user_intent: str = "",
+    problem: str = "",
+    columns: Optional[list] = None,
+) -> dict:
+    """Render a chart from rows you compose yourself (qualitative / analysis-derived data).
+
+    Use this when the content is NOT in a data tool — e.g. a fishbone (root-cause) diagram,
+    a timeline of events, or a small table you assembled from analysis. For numeric program
+    metrics, prefer `render_chart` (which pulls authoritative rows). Do not invent metric
+    numbers here.
+
+    Args:
+        component: "fishbone", "timeline", "table", etc.
+        title: short human title.
+        data: the rows to display, e.g. [{"category": "People", "cause": "..."}] for fishbone.
+        fields: key→role mapping if applicable.
+        summary: one-sentence takeaway.
+        problem: problem statement (fishbone).
+        columns: column specs (table/variance_table).
+    """
+    raw = {
+        "component": component,
+        "title": title,
+        "userIntent": user_intent or None,
+        "data": data or [],
+        "fields": fields or {},
+        "metadata": {"source": "analysis", "explanation": summary},
+    }
+    if problem:
+        raw["problem"] = problem
+    if columns:
+        raw["columns"] = columns
+    return _stage(raw, summary, "analysis", tool_context)
+
+
+def _stage(raw: dict, summary: str, source_tool: str, tool_context: ToolContext) -> dict:
+    """Validate the payload (falling back to a table), record the artifact, and stage both
+    into ADK session state for the runner to return to React."""
     try:
         payload = _adapter.validate_python(raw)
     except Exception:
-        # Degrade to a table rather than failing the turn.
+        raw = dict(raw)
         raw["component"] = "table"
         raw.pop("columns", None)
         raw.pop("problem", None)
@@ -115,7 +162,6 @@ def render_chart(
     )
     payload.artifactId = artifact.artifactId
 
-    # Stage for the server to pick up (see runner.py).
     pending = list(tool_context.state.get(PENDING_KEY) or [])
     pending.append(payload.model_dump(exclude_none=True))
     tool_context.state[PENDING_KEY] = pending

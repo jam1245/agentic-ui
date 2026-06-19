@@ -154,11 +154,15 @@ src/                       ← React reference implementation (UNCHANGED by the 
 server/genesis_app.py      ← FastAPI: runs the ADK agent (real) or deterministic engine (mock)
 agent/                     ← Google ADK project (ADK framework + Genesis LLM via LiteLLM)
   config/model_config.py   get_model() → LiteLlm("openai/gpt-oss-120b", Genesis base)
-  adk_agents/program_analyst/agent.py   root_agent = LlmAgent(model=get_model(), tools=[…])
+  adk_agents/
+    orchestrator/agent.py  root_agent — routes to specialists (ADK sub_agents delegation)
+    cam_agent/ risk_agent/ pm_agent/ rcca_agent/   domain specialists (each consults a Genesis assistant)
+    program_analyst/       single general agent (alternative to the orchestrator)
+    _factory.py            make_specialist(...) — plug-and-play sub-agent builder
   tools/data_tools.py      data tools (rows + source/filters)
-  tools/render_tools.py    render_chart — the data→UI bridge (stages payload to session state)
+  tools/render_tools.py    render_chart / render_structured — the data→UI bridge
   tools/artifact_tools.py  list/get_artifact_data (data-aware follow-ups)
-  tools/external_assistant_tool.py   Genesis Assistants bridge (for Phase 2 sub-agents)
+  tools/external_assistant_tool.py   Genesis Assistants bridge (call_*_assistant_v2)
   runner.py                ADK Runner: run a turn, extract staged payloads/artifacts
   payloads.py / artifacts.py   pydantic mirrors of the two contracts
   genesis_agent.py         deterministic offline engine (mock/CI fallback, no LLM)
